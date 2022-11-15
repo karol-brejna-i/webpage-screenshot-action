@@ -1,3 +1,4 @@
+const core = require("@actions/core");
 let wait = function (milliseconds) {
   return new Promise((resolve) => {
     if (typeof milliseconds !== 'number') {
@@ -6,5 +7,7 @@ let wait = function (milliseconds) {
     setTimeout(() => resolve("done!"), milliseconds)
   });
 };
+
+
 
 module.exports = wait;

@@ -2689,8 +2689,9 @@ exports["default"] = _default;
 /***/ }),
 
 /***/ 258:
-/***/ ((module) => {
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
+const core = __nccwpck_require__(186);
 let wait = function (milliseconds) {
   return new Promise((resolve) => {
     if (typeof milliseconds !== 'number') {
@@ -2700,7 +2701,12 @@ let wait = function (milliseconds) {
   });
 };
 
-module.exports = wait;
+// function that returns mode or default to 'wholePage'
+let getMode = function() {
+  return new Promise((resolve => core.getInput('mode') || 'wholePage'));
+}
+
+module.exports = [wait, getMode];
 
 
 /***/ }),
@@ -2838,20 +2844,37 @@ const core = __nccwpck_require__(186);
 const wait = __nccwpck_require__(258);
 
 
+
 // most @actions toolkit packages have async methods
 async function run() {
-  try {
-    const ms = core.getInput('milliseconds');
-    core.info(`Waiting ${ms} milliseconds ...`);
+    try {
+        // get url input or throw error
+        const url = core.getInput('url');
+        core.info("url: " + url);
+        if (!url) {
+            throw Error('Please provide a URL.');
+        }
 
-    core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    await wait(parseInt(ms));
-    core.info((new Date()).toTimeString());
+        // get mode or default to 'wholePage'
+        const mode = getMode();
+        core.info(`Operation mode: ${mode}`);
 
-    core.setOutput('time', new Date().toTimeString());
-  } catch (error) {
-    core.setFailed(error.message);
-  }
+        core.info(['scrollToElement', 'element'].indexOf(mode).toString());
+
+        // if mode in ['wholePage', 'element']
+        if (['scrollToElement', 'element'].indexOf(mode) === -1) {
+
+        }
+
+
+        core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
+        core.info((new Date()).toTimeString());
+
+        core.setOutput('time', new Date().toTimeString());
+    } catch (error) {
+        core.error(error.message);
+        core.setFailed(error.message);
+    }
 }
 
 run();

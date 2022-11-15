@@ -3,7 +3,7 @@ author: 'Karol Brejna'
 description: 'Take a screenshot of a webpage or its element'
 inputs:
   url: 
-    description: 'The URL of the page to be captured"
+    description: 'The URL of the page to be captured'
     required: true
   mode:
     description: |
@@ -11,10 +11,22 @@ inputs:
       * page
       * wholePage
       * scrollToElement
-      * elementByXpath
-      * elementBySelector
+      * element - capture a specific element by selector (see: "selector" and "xpath" input)
       * script
     default: wholePage
+  selector:
+    description: |
+      CSS selector of the element to be captured or element to which the view should be scrolled. 
+      Can be used in "element" and "scrollToElement" modes.
+      Use "selector" or "xpath" input, not both.
+    required: false
+  xpath:
+    description: |
+      xpath expression for the element to be captured or element to which the view should be scrolled. 
+      Can be used in "element" and "scrollToElement" modes.
+      Use "selector" or "xpath" input, not both.
+    required: false
+
   milliseconds:  # id of input
     description: 'number of milliseconds to wait'
     required: true
