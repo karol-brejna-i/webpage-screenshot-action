@@ -1,5 +1,5 @@
 {
-  "name": "javascript-action",
+  "name": "puppeteer-script-action",
   "version": "1.0.0",
   "description": "JavaScript Action Template",
   "main": "index.js",
