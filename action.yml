@@ -1,6 +1,20 @@
-name: 'Wait'
-description: 'Wait a designated number of milliseconds'
+name: 'Take Webpage Screenshot'
+author: 'Karol Brejna'
+description: 'Take a screenshot of a webpage or its element'
 inputs:
+  url: 
+    description: 'The URL of the page to be captured"
+    required: true
+  mode:
+    description: |
+      Mode of operation. Possible values:
+      * page
+      * wholePage
+      * scrollToElement
+      * elementByXpath
+      * elementBySelector
+      * script
+    default: wholePage
   milliseconds:  # id of input
     description: 'number of milliseconds to wait'
     required: true
