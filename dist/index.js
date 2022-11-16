@@ -2688,26 +2688,61 @@ exports["default"] = _default;
 
 /***/ }),
 
-/***/ 258:
+/***/ 109:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(186);
-let wait = function (milliseconds) {
-  return new Promise((resolve) => {
-    if (typeof milliseconds !== 'number') {
-      throw new Error('milliseconds not a number');
+module.exports = {
+    getMode: async function () {
+        return new Promise(
+            (resolve => {
+                const result = core.getInput('mode') || 'wholePage';
+                resolve(result);
+            }));
+    },
+
+    getParameters: async function () {
+        return new Promise(
+            (async resolve => {
+                const url = core.getInput('url');
+                const mode = await this.getMode();
+                const xpath = core.getInput('xpath');
+                const selector = core.getInput('selector');
+                resolve({
+                    url: url,
+                    mode: mode,
+                    xpath: xpath,
+                    selector: selector
+                });
+            }));
+    },
+
+    validateParameters: async function (parametersJson) {
+        return new Promise(
+            (resolve => {
+
+                if (!parametersJson) {
+                    throw Error('Empty parameters object.')
+                }
+
+
+                if (!parametersJson.url) {
+                    throw Error('Please provide a URL.');
+                }
+
+                if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
+                    if (!parametersJson.xpath && !parametersJson.selector) {
+                        throw Error(`Please provide xpath or selector for '${parametersJson.mode} mode.`);
+                    }
+                } else if (parametersJson.mode === 'script') {
+                    throw Error(`Script mode is not implemented yet.`);
+                }
+
+                resolve(true);
+            }));
     }
-    setTimeout(() => resolve("done!"), milliseconds)
-  });
-};
 
-// function that returns mode or default to 'wholePage'
-let getMode = function() {
-  return new Promise((resolve => core.getInput('mode') || 'wholePage'));
 }
-
-module.exports = [wait, getMode];
-
 
 /***/ }),
 
@@ -2841,36 +2876,25 @@ var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
 const core = __nccwpck_require__(186);
-const wait = __nccwpck_require__(258);
 
-
+const tools = __nccwpck_require__(109);
 
 // most @actions toolkit packages have async methods
 async function run() {
     try {
-        // get url input or throw error
-        const url = core.getInput('url');
-        core.info("url: " + url);
-        if (!url) {
-            throw Error('Please provide a URL.');
-        }
+        const parameters = await tools.getParameters();
+        core.info("Parameters: " + JSON.stringify(parameters));
+        const parametersValid = await tools.validateParameters(parameters);
+        core.info("Parameters valid: " + parametersValid);
 
-        // get mode or default to 'wholePage'
-        const mode = getMode();
-        core.info(`Operation mode: ${mode}`);
-
-        core.info(['scrollToElement', 'element'].indexOf(mode).toString());
-
-        // if mode in ['wholePage', 'element']
-        if (['scrollToElement', 'element'].indexOf(mode) === -1) {
-
-        }
-
-
-        core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
         core.info((new Date()).toTimeString());
-
         core.setOutput('time', new Date().toTimeString());
+
+        let params = {};
+        // check if url field exists in parametersJson
+        // if (parameters.url) {
+
+
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);
