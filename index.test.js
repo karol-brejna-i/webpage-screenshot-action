@@ -105,12 +105,3 @@ test('non-default mode', async () => {
 //     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
 //     console.log(result);
 // })
-//
-//
-// // test('wait 500 ms', async () => {
-// //   const start = new Date();
-// //   await wait(500);
-// //   const end = new Date();
-// //   var delta = Math.abs(end - start);
-// //   expect(delta).toBeGreaterThanOrEqual(500);
-// // });

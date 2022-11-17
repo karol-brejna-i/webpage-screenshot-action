@@ -1,6 +1,9 @@
 name: 'Take Webpage Screenshot'
 author: 'Karol Brejna'
 description: 'Take a screenshot of a webpage or its element'
+branding:
+    icon: 'layout'
+    color: 'blue'
 inputs:
   url: 
     description: 'The URL of the page to be captured'
@@ -26,11 +29,12 @@ inputs:
       Can be used in "element" and "scrollToElement" modes.
       Use "selector" or "xpath" input, not both.
     required: false
+  scriptBefore:
+    description: |
+      Script to be executed before the screenshot is taken. 
+      Can be used in "script", "page", "wholePage" mode.
+    required: false
 
-  milliseconds:  # id of input
-    description: 'number of milliseconds to wait'
-    required: true
-    default: '1000'
 outputs:
   time: # output will be available to future steps
     description: 'The current time after waiting'

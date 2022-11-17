@@ -2692,6 +2692,7 @@ exports["default"] = _default;
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(186);
+
 module.exports = {
     getMode: async function () {
         return new Promise(
@@ -2704,7 +2705,7 @@ module.exports = {
     getParameters: async function () {
         return new Promise(
             (async resolve => {
-                const url = core.getInput('url');
+                const url = core.getInput('url', {required: true});
                 const mode = await this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
@@ -2879,13 +2880,16 @@ const core = __nccwpck_require__(186);
 
 const tools = __nccwpck_require__(109);
 
-// most @actions toolkit packages have async methods
 async function run() {
     try {
         const parameters = await tools.getParameters();
         core.info("Parameters: " + JSON.stringify(parameters));
         const parametersValid = await tools.validateParameters(parameters);
         core.info("Parameters valid: " + parametersValid);
+
+
+        // https://github.com/lannonbr/puppeteer-screenshot-action/blob/master/index.js -- works even on windows; test yours
+        // https://www.urlbox.io/website-screenshots-puppeteer#using-puppeteer-to-take-an-element-screenshot
 
         core.info((new Date()).toTimeString());
         core.setOutput('time', new Date().toTimeString());

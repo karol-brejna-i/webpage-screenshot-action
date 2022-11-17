@@ -1,4 +1,5 @@
 const core = require("@actions/core");
+
 module.exports = {
     getMode: async function () {
         return new Promise(
@@ -10,9 +11,9 @@ module.exports = {
 
     getParameters: async function () {
         return new Promise(
-        (async resolve => {
-            const url = core.getInput('url', {required: true});
-            const mode = await this.getMode();
+            (async resolve => {
+                const url = core.getInput('url', {required: true});
+                const mode = await this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
                 resolve({
