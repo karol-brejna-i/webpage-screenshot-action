@@ -2747,6 +2747,14 @@ module.exports = {
 
 /***/ }),
 
+/***/ 781:
+/***/ ((module) => {
+
+module.exports = eval("require")("./script");
+
+
+/***/ }),
+
 /***/ 491:
 /***/ ((module) => {
 
@@ -2877,8 +2885,25 @@ var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
 const core = __nccwpck_require__(186);
-
 const tools = __nccwpck_require__(109);
+const fs = __nccwpck_require__(147);
+
+// function that reads a file and replaces the placeholder with the actual script and saves the file.
+async function replaceScript(srcFile, dstFile, newScript, pattern = "/*~~REPLACE~~*/") {
+    // read the file
+    fs.readFile(srcFile, "utf8", function (err, data) {
+        if (err) {
+            return console.log(err);
+        }
+        // replace the text
+        var result = data.replace(pattern, newScript);
+
+        // write the file
+        fs.writeFile(dstFile, result, "utf8", function (err) {
+            if (err) return console.log(err);
+        });
+    });
+}
 
 async function run() {
     try {
@@ -2887,17 +2912,27 @@ async function run() {
         const parametersValid = await tools.validateParameters(parameters);
         core.info("Parameters valid: " + parametersValid);
 
+        await replaceScript("script.js.template", "script.js", "result = 'Hello world';");
+        // const requireUncached = require('require-uncached');
+        // const script = requireUncached('./script.js');
 
-        // https://github.com/lannonbr/puppeteer-screenshot-action/blob/master/index.js -- works even on windows; test yours
-        // https://www.urlbox.io/website-screenshots-puppeteer#using-puppeteer-to-take-an-element-screenshot
+
+        const customScript = __nccwpck_require__(781);
+        delete require.cache[require.resolve('./script')]
+        let scriptResult = await customScript();
+        core.info("Script result: " + scriptResult);
+
+        // https://github.com/lannonbr/puppetpeer-screenshot-action/blob/master/index.js -- works even on windows; test yours
 
         core.info((new Date()).toTimeString());
         core.setOutput('time', new Date().toTimeString());
 
-        let params = {};
-        // check if url field exists in parametersJson
-        // if (parameters.url) {
 
+        const beforeScript = core.getInput('beforeScript');
+        if (parameters['beforeScript']) {
+            core.info("Using beforeScript parameter.");
+            // let scriptResult = await script();
+        }
 
     } catch (error) {
         core.error(error.message);

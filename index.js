@@ -27,13 +27,16 @@ async function run() {
         core.info("Parameters valid: " + parametersValid);
 
         await replaceScript("script.js.template", "script.js", "result = 'Hello world';");
-        const script = require("./script");
-        // const {script} = await import("./script.js");
-        let scriptResult = await script();
+        // const requireUncached = require('require-uncached');
+        // const script = requireUncached('./script.js');
+
+
+        const customScript = require("./script");
+        delete require.cache[require.resolve('./script')]
+        let scriptResult = await customScript();
         core.info("Script result: " + scriptResult);
 
-        // https://github.com/lannonbr/puppeteer-screenshot-action/blob/master/index.js -- works even on windows; test yours
-        // https://www.urlbox.io/website-screenshots-puppeteer#using-puppeteer-to-take-an-element-screenshot
+        // https://github.com/lannonbr/puppetpeer-screenshot-action/blob/master/index.js -- works even on windows; test yours
 
         core.info((new Date()).toTimeString());
         core.setOutput('time', new Date().toTimeString());
