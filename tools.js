@@ -1,4 +1,4 @@
-const core = require("@actions/core");
+const core = require('@actions/core');
 
 module.exports = {
     getMode: async function () {
@@ -11,16 +11,18 @@ module.exports = {
 
     getParameters: async function () {
         return new Promise(
-            (async resolve => {
+            (resolve => {
                 const url = core.getInput('url', {required: true});
-                const mode = await this.getMode();
+                const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
+                const beforeScript = core.getInput('beforeScript');
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
-                    selector: selector
+                    selector: selector,
+                    beforeScript: beforeScript
                 });
             }));
     },
@@ -32,7 +34,6 @@ module.exports = {
                 if (!parametersJson) {
                     throw Error('Empty parameters object.')
                 }
-
 
                 if (!parametersJson.url) {
                     throw Error('Please provide a URL.');
@@ -49,5 +50,4 @@ module.exports = {
                 resolve(true);
             }));
     }
-
 }

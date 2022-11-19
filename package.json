@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/actions/javascript-action.git"
+    "url": "git+https://github.com/karol-brejna-i/puppeteer-script-action.git"
   },
   "keywords": [
     "GitHub",
@@ -21,11 +21,12 @@
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/actions/javascript-action/issues"
+    "url": "https://github.com/karol-brejna-i/puppeteer-script-action/issues"
   },
-  "homepage": "https://github.com/actions/javascript-action#readme",
+  "homepage": "https://github.com/karol-brejna-i/puppeteer-script-action#readme",
   "dependencies": {
     "@actions/core": "^1.10.0",
+    "puppeteer": "^19.2.2",
     "require-uncached": "^2.0.0"
   },
   "devDependencies": {

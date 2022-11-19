@@ -1,22 +1,15 @@
 const core = require('@actions/core');
 const tools = require('./tools');
-const fs = require("fs");
 
-// function that reads a file and replaces the placeholder with the actual script and saves the file.
-async function replaceScript(srcFile, dstFile, newScript, pattern = "/*~~REPLACE~~*/") {
-    // read the file
-    fs.readFile(srcFile, "utf8", function (err, data) {
-        if (err) {
-            return console.log(err);
-        }
-        // replace the text
-        var result = data.replace(pattern, newScript);
-
-        // write the file
-        fs.writeFile(dstFile, result, "utf8", function (err) {
-            if (err) return console.log(err);
-        });
+function catchConsole(page) {
+    page.on("pageerror", function (err) {
+        console.log(`Page error: ${err.toString()}`);
     });
+
+    page.on('error', function (err) {
+        console.log('error happen at the page: ', err);
+    });
+    page.on('console', message => console.log(`${message.text()}`));
 }
 
 async function run() {
@@ -26,26 +19,26 @@ async function run() {
         const parametersValid = await tools.validateParameters(parameters);
         core.info("Parameters valid: " + parametersValid);
 
-        await replaceScript("script.js.template", "script.js", "result = 'Hello world';");
-        // const requireUncached = require('require-uncached');
-        // const script = requireUncached('./script.js');
-
-
-        const customScript = require("./script");
-        delete require.cache[require.resolve('./script')]
-        let scriptResult = await customScript();
-        core.info("Script result: " + scriptResult);
-
-        // https://github.com/lannonbr/puppetpeer-screenshot-action/blob/master/index.js -- works even on windows; test yours
-
         core.info((new Date()).toTimeString());
         core.setOutput('time', new Date().toTimeString());
 
-
         const beforeScript = core.getInput('beforeScript');
+        core.info("Before script: " + beforeScript);
         if (parameters['beforeScript']) {
             core.info("Using beforeScript parameter.");
-            // let scriptResult = await script();
+            const puppeteer = require('puppeteer');
+            const browser = await puppeteer.launch();
+            const page = await browser.newPage();
+            catchConsole(page);
+            const url = 'https://github.com/karol-brejna-i/test-actions/blob/test-pr-inject/README.md'
+            await page.goto(url);
+
+            const runMyScript = require('./script.js');
+            let result = await runMyScript(page, beforeScript);
+            core.info("Result: " + result);
+
+            await page.screenshot({path: 'e-1.png', fullPage: false});
+            await browser.close();
         }
 
     } catch (error) {

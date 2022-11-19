@@ -1,12 +1,12 @@
 const process = require('process');
-const cp = require('child_process');
-const path = require('path');
+// const cp = require('child_process');
+// const path = require('path');
 const tools = require('./tools');
 
 test('default mode', async () => {
     console.log("default mode");
     delete process.env['INPUT_MODE']
-    mode = await tools.getMode();
+    const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).toBe('wholePage');
 });
@@ -14,7 +14,7 @@ test('default mode', async () => {
 test('non-default mode', async () => {
     console.log("non-default mode");
     process.env['INPUT_MODE'] = 'element';
-    mode = await tools.getMode();
+    const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).not.toBe('wholePage');
 });
