@@ -28132,11 +28132,60 @@ function defaultCallback(err) {
 
 /***/ }),
 
+/***/ 2987:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const core = __nccwpck_require__(2186);
+const puppeteer = __nccwpck_require__(7174);
+const runMyScript = __nccwpck_require__(4261);
+
+module.exports = {
+    catchConsole: async function (page) {
+        page.on("pageerror", function (err) {
+            console.log(`Page error: ${err.toString()}`);
+        });
+
+        page.on('error', function (err) {
+            console.log('error happen at the page: ', err);
+        });
+        page.on('console', message => console.log(`${message.text()}`));
+    },
+
+    puppetRun: async function (parameters) {
+        core.info("Puppet run.");
+
+        // start the headless browser
+        const browser = await puppeteer.launch();
+        const page = await browser.newPage();
+        // capture browser console, if required
+        await this.catchConsole(page);
+
+        // const url = 'https://github.com/karol-brejna-i/test-actions/blob/test-pr-inject/README.md'
+        await page.goto(parameters['url']);
+
+        let result = undefined;
+        const beforeScript = core.getInput('beforeScript');
+        if (beforeScript) {
+            core.info("Using beforeScript parameter.");
+
+            const runMyScript = __nccwpck_require__(4261);
+            result = await runMyScript(page, beforeScript);
+            core.info("Result: " + result);
+        }
+
+        await page.screenshot({path: 'e-1.png', fullPage: false});
+        await browser.close();
+    }
+
+}
+
+/***/ }),
+
 /***/ 4261:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
-// TODO: use core logging (instead of console.log)
+
 let runMyScript = async function (page, theScript) {
     core.info('runMyScript');
     core.debug(theScript);
@@ -54663,17 +54712,7 @@ var __webpack_exports__ = {};
 (() => {
 const core = __nccwpck_require__(2186);
 const tools = __nccwpck_require__(109);
-
-function catchConsole(page) {
-    page.on("pageerror", function (err) {
-        console.log(`Page error: ${err.toString()}`);
-    });
-
-    page.on('error', function (err) {
-        console.log('error happen at the page: ', err);
-    });
-    page.on('console', message => console.log(`${message.text()}`));
-}
+const puppetTools = __nccwpck_require__(2987);
 
 async function run() {
     try {
@@ -54682,27 +54721,11 @@ async function run() {
         const parametersValid = await tools.validateParameters(parameters);
         core.info("Parameters valid: " + parametersValid);
 
+        puppetTools.puppetRun(parameters);
+
         core.info((new Date()).toTimeString());
         core.setOutput('time', new Date().toTimeString());
 
-        const beforeScript = core.getInput('beforeScript');
-        core.info("Before script: " + beforeScript);
-        if (parameters['beforeScript']) {
-            core.info("Using beforeScript parameter.");
-            const puppeteer = __nccwpck_require__(7174);
-            const browser = await puppeteer.launch();
-            const page = await browser.newPage();
-            catchConsole(page);
-            const url = 'https://github.com/karol-brejna-i/test-actions/blob/test-pr-inject/README.md'
-            await page.goto(url);
-
-            const runMyScript = __nccwpck_require__(4261);
-            let result = await runMyScript(page, beforeScript);
-            core.info("Result: " + result);
-
-            await page.screenshot({path: 'e-1.png', fullPage: false});
-            await browser.close();
-        }
 
     } catch (error) {
         core.error(error.message);

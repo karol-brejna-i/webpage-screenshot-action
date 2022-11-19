@@ -1,5 +1,5 @@
 const core = require('@actions/core');
-// TODO: use core logging (instead of console.log)
+
 let runMyScript = async function (page, theScript) {
     core.info('runMyScript');
     core.debug(theScript);

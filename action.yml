@@ -1,6 +1,6 @@
-name: 'Take Webpage Screenshot'
+name: 'Webpage Screenshot'
 author: 'Karol Brejna'
-description: 'Take a screenshot of a webpage or its element'
+description: 'Take a screenshot of a webpage or its element. Optionall, run a script (in the browser) before taking the screenshot.'
 branding:
     icon: 'layout'
     color: 'blue'
@@ -34,6 +34,10 @@ inputs:
       Script to be executed before the screenshot is taken. 
       Can be used in "script", "page", "wholePage" mode.
     required: false
+  output:
+    description: 'Output file name/path. If not specified, the screenshot will be saved to "screenshot.png" in the current directory.'
+    required: false
+    default: screenshot.png
 
 outputs:
   time: # output will be available to future steps
