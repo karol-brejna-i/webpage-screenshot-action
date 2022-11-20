@@ -1,6 +1,6 @@
 name: 'Webpage Screenshot'
 author: 'Karol Brejna'
-description: 'Take a screenshot of a webpage or its element. Optionall, run a script (in the browser) before taking the screenshot.'
+description: 'Take a screenshot of a webpage or its element. Optionally, run a script (in the browser) before taking the screenshot.'
 branding:
     icon: 'layout'
     color: 'blue'
