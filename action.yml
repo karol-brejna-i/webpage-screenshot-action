@@ -1,10 +1,43 @@
-name: 'Wait'
-description: 'Wait a designated number of milliseconds'
+name: 'Webpage Screenshot'
+author: 'Karol Brejna'
+description: 'Take a screenshot of a webpage or its element. Optionall, run a script (in the browser) before taking the screenshot.'
+branding:
+    icon: 'layout'
+    color: 'blue'
 inputs:
-  milliseconds:  # id of input
-    description: 'number of milliseconds to wait'
+  url: 
+    description: 'The URL of the page to be captured'
     required: true
-    default: '1000'
+  mode:
+    description: |
+      Mode of operation. Possible values:
+      * page
+      * wholePage
+      * scrollToElement
+      * element - capture a specific element by selector (see: "selector" and "xpath" input)
+    default: wholePage
+  selector:
+    description: |
+      CSS selector of the element to be captured or element to which the view should be scrolled. 
+      Can be used in "element" and "scrollToElement" modes.
+      Use "selector" or "xpath" input, not both.
+    required: false
+  xpath:
+    description: |
+      xpath expression for the element to be captured or element to which the view should be scrolled. 
+      Can be used in "element" and "scrollToElement" modes.
+      Use "selector" or "xpath" input, not both.
+    required: false
+  scriptBefore:
+    description: |
+      Script to be executed before the screenshot is taken. 
+      Can be used in "script", "page", "wholePage" mode.
+    required: false
+  output:
+    description: 'Output file name/path. If not specified, the screenshot will be saved to "screenshot.png" in the current directory.'
+    required: false
+    default: screenshot.png
+
 outputs:
   time: # output will be available to future steps
     description: 'The current time after waiting'

@@ -1,21 +1,24 @@
 const core = require('@actions/core');
-const wait = require('./wait');
+const tools = require('./tools');
+const puppetTools = require("./puppetTools");
 
-
-// most @actions toolkit packages have async methods
 async function run() {
-  try {
-    const ms = core.getInput('milliseconds');
-    core.info(`Waiting ${ms} milliseconds ...`);
+    try {
+        const parameters = await tools.getParameters();
+        core.info("Parameters: " + JSON.stringify(parameters));
+        const parametersValid = await tools.validateParameters(parameters);
+        core.info("Parameters valid: " + parametersValid);
 
-    core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    await wait(parseInt(ms));
-    core.info((new Date()).toTimeString());
+        puppetTools.puppetRun(parameters);
 
-    core.setOutput('time', new Date().toTimeString());
-  } catch (error) {
-    core.setFailed(error.message);
-  }
+        core.info((new Date()).toTimeString());
+        core.setOutput('time', new Date().toTimeString());
+
+
+    } catch (error) {
+        core.error(error.message);
+        core.setFailed(error.message);
+    }
 }
 
 run();

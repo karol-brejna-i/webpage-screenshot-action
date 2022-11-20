@@ -1,24 +1,50 @@
-const wait = require('./wait');
 const process = require('process');
 const cp = require('child_process');
 const path = require('path');
+const tools = require('./tools');
 
-test('throws invalid number', async () => {
-  await expect(wait('foo')).rejects.toThrow('milliseconds not a number');
+test('default mode', async () => {
+    console.log("default mode");
+    delete process.env['INPUT_MODE']
+    const mode = await tools.getMode();
+    console.log("mode: " + mode);
+    await expect(mode).toBe('wholePage');
 });
 
-test('wait 500 ms', async () => {
-  const start = new Date();
-  await wait(500);
-  const end = new Date();
-  var delta = Math.abs(end - start);
-  expect(delta).toBeGreaterThanOrEqual(500);
+test('non-default mode', async () => {
+    console.log("non-default mode");
+    process.env['INPUT_MODE'] = 'element';
+    const mode = await tools.getMode();
+    console.log("mode: " + mode);
+    await expect(mode).not.toBe('wholePage');
 });
 
-// shows how the runner will run a javascript action with env / stdout protocol
-test('test runs', () => {
-  process.env['INPUT_MILLISECONDS'] = 100;
-  const ip = path.join(__dirname, 'index.js');
-  const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
-  console.log(result);
+test('Fail without URL', async () => {
+    console.log("Fail without URL");
+    delete process.env['INPUT_MODE'];
+    const ip = path.join(__dirname, 'index.js');
+
+    try {
+        const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+        console.log(result);
+        throw new Error('Should have failed');
+    } catch (error) {
+        console.info("Expected fail.");
+    }
+});
+
+test('test parameter for element', () => {
+    console.log("test parameter for element");
+    process.env['INPUT_URL'] = 'https://google.com';
+    process.env['INPUT_MODE'] = 'element';
+    const ip = path.join(__dirname, 'index.js');
+
+    try {
+        const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+        console.log(result);
+        throw new Error('Should have failed');
+    } catch (error) {
+        console.info("Expected fail.");
+        // console.log("Error: " + error.message);
+    }
 })
