@@ -15,7 +15,6 @@ inputs:
       * wholePage
       * scrollToElement
       * element - capture a specific element by selector (see: "selector" and "xpath" input)
-      * script
     default: wholePage
   selector:
     description: |

@@ -1,7 +1,7 @@
 {
-  "name": "puppeteer-script-action",
+  "name": "webpage-screenshot-action",
   "version": "1.0.0",
-  "description": "JavaScript Action Template",
+  "description": "Webpage Screenshot Action",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
