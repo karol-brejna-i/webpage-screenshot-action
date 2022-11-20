@@ -22,4 +22,4 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./
       with:
-        URL: https://googole.com
+        URL: https://google.com
