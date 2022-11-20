@@ -16,16 +16,18 @@ module.exports = {
     puppetRun: async function (parameters) {
         core.info("Puppet run.");
 
+        const beforeScript = parameters['beforeScript'];
+        const url = parameters['url'];
+
         // start the headless browser
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         // capture browser console, if required
         await this.catchConsole(page);
 
-        await page.goto(parameters['url']);
+        await page.goto(url);
 
         let result = undefined;
-        const beforeScript = core.getInput('beforeScript');
         if (beforeScript) {
             core.info("Using beforeScript parameter.");
 
