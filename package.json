@@ -26,8 +26,7 @@
   "homepage": "https://github.com/karol-brejna-i/puppeteer-script-action#readme",
   "dependencies": {
     "@actions/core": "^1.10.0",
-    "puppeteer": "^19.2.2",
-    "require-uncached": "^2.0.0"
+    "puppeteer": "^19.2.2"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.34.0",
