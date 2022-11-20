@@ -28137,7 +28137,6 @@ function defaultCallback(err) {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(7174);
-const runMyScript = __nccwpck_require__(4261);
 
 module.exports = {
     catchConsole: async function (page) {
@@ -28160,7 +28159,6 @@ module.exports = {
         // capture browser console, if required
         await this.catchConsole(page);
 
-        // const url = 'https://github.com/karol-brejna-i/test-actions/blob/test-pr-inject/README.md'
         await page.goto(parameters['url']);
 
         let result = undefined;
@@ -28173,7 +28171,7 @@ module.exports = {
             core.info("Result: " + result);
         }
 
-        await page.screenshot({path: 'e-1.png', fullPage: false});
+        await page.screenshot({path: parameters.output, fullPage: false});
         await browser.close();
     }
 
@@ -28228,12 +28226,14 @@ module.exports = {
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
                 const beforeScript = core.getInput('beforeScript');
+                const output = core.getInput('output') || 'screenshot.png';
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
-                    beforeScript: beforeScript
+                    beforeScript: beforeScript,
+                    output: output
                 });
             }));
     },

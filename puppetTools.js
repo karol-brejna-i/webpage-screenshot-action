@@ -34,7 +34,7 @@ module.exports = {
             core.info("Result: " + result);
         }
 
-        await page.screenshot({path: 'e-1.png', fullPage: false});
+        await page.screenshot({path: parameters.output, fullPage: false});
         await browser.close();
     }
 
