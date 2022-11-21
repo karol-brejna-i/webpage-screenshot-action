@@ -70,3 +70,4 @@ The following features are not implemented yet, but may be added in the future:
 2. Allow for multiple screenshots (i.e. for different devices)
 3. Allow for multiple URLs (i.e. for different pages)
 4. Capture the browser console output (if required)
+5. Specify screenshot type (puppeteer supports either jpeg or png)
