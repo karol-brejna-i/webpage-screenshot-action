@@ -1,0 +1,46 @@
+name: "Manual run of the action"
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL to check'
+        required: true
+        default: 'https://google.com'
+      scriptBefore:
+        description: 'Script to run before the check'
+        required: false
+        type: multiline
+        default: ''
+
+jobs:
+    screenshotLocal:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v3
+        - run: npm install
+        - name: Run the action
+          uses: ./
+          id: screenshot
+          with:
+            url: ${{ github.event.inputs.url }}
+            scriptBefore: ${{ github.event.inputs.scriptBefore }}
+    screenshotExternal:
+      runs-on: ubuntu-latest
+      steps:
+        - env:
+            URL: ${{ github.event.inputs.url }}
+            SCRIPT_BEFORE:
+              ${{ github.event.inputs.scriptBefore }}
+          run: |
+            echo "URL: $URL"
+            echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
+
+        - uses: karol-brejna-i/webpage-screenshot-action@develop
+          id: screenshot
+          with:
+            url: ${{ github.event.inputs.url }}
+            scriptBefore: ${{ github.event.inputs.scriptBefore }}
+
+
+
