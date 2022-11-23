@@ -39,8 +39,8 @@ inputs:
     default: screenshot.png
 
 outputs:
-  time: # output will be available to future steps
-    description: 'The current time after waiting'
+  scriptResult:
+    description: 'JSON string with the result of the script execution.'
 runs:
   using: 'node16'
   main: 'dist/index.js'

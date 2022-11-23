@@ -53,6 +53,12 @@ const puppetRun = async function (parameters) {
             return result;
         }
     ));
+
+    const resultObject = results.map((result, index) => {
+        return {url: urls[index], result: result};
+    });
+    core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
+    return resultObject;
 };
 
 module.exports = {catchConsole, puppetRun};
