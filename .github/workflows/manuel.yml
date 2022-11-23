@@ -26,7 +26,6 @@ jobs:
             url: ${{ github.event.inputs.url }}
             scriptBefore: ${{ github.event.inputs.scriptBefore }}
         - run: |
-            echo "${{ steps.screenshot.outputs.time }}"
             ls
 
     screenshotExternal:
@@ -46,5 +45,4 @@ jobs:
             url: ${{ github.event.inputs.url }}
             scriptBefore: ${{ github.event.inputs.scriptBefore }}
         - run: |
-            echo "${{ steps.screenshot.outputs.time }}"
             ls
