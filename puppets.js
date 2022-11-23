@@ -43,7 +43,12 @@ const puppetRun = async function (parameters) {
                 core.info('Using beforeScript parameter.');
 
                 const runMyScript = require('./script.js');
-                result = await runMyScript(page, beforeScript);
+                try {
+                    result = await runMyScript(page, beforeScript);
+                } catch (error) {
+                    core.error(`Error in beforeScript: ${error.message}`);
+                    core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
+                }
                 core.info(`Result: ${result}`);
             }
 

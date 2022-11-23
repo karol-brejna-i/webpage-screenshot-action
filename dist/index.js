@@ -28180,7 +28180,12 @@ const puppetRun = async function (parameters) {
                 core.info('Using beforeScript parameter.');
 
                 const runMyScript = __nccwpck_require__(4261);
-                result = await runMyScript(page, beforeScript);
+                try {
+                    result = await runMyScript(page, beforeScript);
+                } catch (error) {
+                    core.error(`Error in beforeScript: ${error.message}`);
+                    core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
+                }
                 core.info(`Result: ${result}`);
             }
 
@@ -28214,10 +28219,13 @@ let runMyScript = async function (page, theScript) {
 
     return await page.evaluate(async (element, script) => {
         return new Promise((resolve, reject) => {
-            // console.info(`script inside Promise: ${script}`);
             let result = undefined;
-            // TODO: if (err) reject(err);
-            eval(script);
+
+            try {
+                eval(script);
+            } catch (error) {
+                reject(error);
+            }
             resolve(result);
         });
 

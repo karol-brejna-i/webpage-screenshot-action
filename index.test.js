@@ -42,8 +42,6 @@ test('test parameter for element', () => {
     try {
         const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
         console.log(result);
-
-
     } catch (error) {
         console.info("Expected fail.");
         console.log("Error: " + error.message);
@@ -72,3 +70,22 @@ test('test run with beforeScript', async() => {
     console.log(result);
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":42}'));
 })
+
+test('test run with faulty beforeScript', async() => {
+    console.log("test parameter for element");
+    process.env['INPUT_URL'] = 'https://google.com';
+    process.env['INPUT_MODE'] = 'element';
+    process.env['INPUT_BEFORESCRIPT'] = 'return 42;';
+    const ip = path.join(__dirname, 'index.js');
+
+    try {
+        const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+        throw new Error('Should have failed');
+    } catch (error) {
+        console.info("Expected fail.");
+        console.log("Error: " + error.message);
+
+        await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in beforeScript'));
+    }
+})
+

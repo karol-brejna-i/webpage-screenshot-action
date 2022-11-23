@@ -6,10 +6,13 @@ let runMyScript = async function (page, theScript) {
 
     return await page.evaluate(async (element, script) => {
         return new Promise((resolve, reject) => {
-            // console.info(`script inside Promise: ${script}`);
             let result = undefined;
-            // TODO: if (err) reject(err);
-            eval(script);
+
+            try {
+                eval(script);
+            } catch (error) {
+                reject(error);
+            }
             resolve(result);
         });
 
