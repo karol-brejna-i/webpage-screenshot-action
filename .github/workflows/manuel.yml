@@ -7,7 +7,7 @@ on:
         description: 'URL to check'
         required: true
         default: 'https://google.com'
-      scriptBefore:
+      beforeScript:
         description: 'Script to run before the check'
         required: false
         type: multiline
@@ -24,7 +24,7 @@ jobs:
           id: screenshot
           with:
             url: ${{ github.event.inputs.url }}
-            scriptBefore: ${{ github.event.inputs.scriptBefore }}
+            beforeScript: ${{ github.event.inputs.beforeScript }}
         - run: |
             ls
 
@@ -33,16 +33,42 @@ jobs:
       steps:
         - env:
             URL: ${{ github.event.inputs.url }}
-            SCRIPT_BEFORE:
-              ${{ github.event.inputs.scriptBefore }}
+            BEFORE_SCRIPT:
+              ${{ github.event.inputs.beforeScript }}
           run: |
             echo "URL: $URL"
-            echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
+            echo "BEFORE_SCRIPT: $BEFORE_SCRIPT"
 
         - uses: karol-brejna-i/webpage-screenshot-action@develop
           id: screenshot
           with:
             url: ${{ github.event.inputs.url }}
-            scriptBefore: ${{ github.event.inputs.scriptBefore }}
+            beforeScript: ${{ github.event.inputs.beforeScript }}
+        - run: |
+            ls
+
+    multiline:
+      runs-on: ubuntu-latest
+      steps:
+        - env:
+            URL: ${{ github.event.inputs.url }}
+            BEFORE_SCRIPT:
+              ${{ github.event.inputs.beforeScript }}
+          run: |
+            echo "URL: $URL"
+            echo "BEFORE_SCRIPT: $BEFORE_SCRIPT"
+
+        - uses: karol-brejna-i/webpage-screenshot-action@develop
+          id: screenshot
+          with:
+            url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+            beforeScript: |
+              const headerElement = document.createElement("h1")
+              headerElement.innerHTML = "!+!-+!-+!-+!-!";
+              const xpathExpression = '//h1';
+              const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue
+              firstChild.parentNode.insertBefore(headerElement, firstChild)
+
+              result = "I made it!";
         - run: |
             ls
