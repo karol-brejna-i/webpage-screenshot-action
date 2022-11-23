@@ -11,6 +11,6 @@ jobs:
           id: answer
           with:
             url: https://en.wikipedia.org/wiki/42_(number)
-            beforeScript: result=42;
+            scriptBefore: result=42;
         - run: |
             echo '${{ steps.answer.outputs.scriptResult }}'

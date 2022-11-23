@@ -7,7 +7,7 @@ on:
         description: 'URL to check'
         required: true
         default: 'https://google.com'
-      beforeScript:
+      scriptBefore:
         description: 'Script to run before the check'
         required: false
         type: multiline
@@ -24,7 +24,7 @@ jobs:
           id: screenshot
           with:
             url: ${{ github.event.inputs.url }}
-            beforeScript: ${{ github.event.inputs.beforeScript }}
+            scriptBefore: ${{ github.event.inputs.scriptBefore }}
         - run: |
             ls
 
@@ -33,17 +33,17 @@ jobs:
       steps:
         - env:
             URL: ${{ github.event.inputs.url }}
-            BEFORE_SCRIPT:
-              ${{ github.event.inputs.beforeScript }}
+            SCRIPT_BEFORE:
+              ${{ github.event.inputs.scriptBefore }}
           run: |
             echo "URL: $URL"
-            echo "BEFORE_SCRIPT: $BEFORE_SCRIPT"
+            echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
 
         - uses: karol-brejna-i/webpage-screenshot-action@develop
           id: screenshot
           with:
             url: ${{ github.event.inputs.url }}
-            beforeScript: ${{ github.event.inputs.beforeScript }}
+            scriptBefore: ${{ github.event.inputs.scriptBefore }}
         - run: |
             ls
 
@@ -52,17 +52,17 @@ jobs:
       steps:
         - env:
             URL: ${{ github.event.inputs.url }}
-            BEFORE_SCRIPT:
-              ${{ github.event.inputs.beforeScript }}
+            SCRIPT_BEFORE:
+              ${{ github.event.inputs.scriptBefore }}
           run: |
             echo "URL: $URL"
-            echo "BEFORE_SCRIPT: $BEFORE_SCRIPT"
+            echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
 
         - uses: karol-brejna-i/webpage-screenshot-action@develop
           id: screenshot
           with:
             url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-            beforeScript: |
+            scriptBefore: |
               const headerElement = document.createElement("h1")
               headerElement.innerHTML = "!+!-+!-+!-+!-!";
               const xpathExpression = '//h1';
@@ -80,7 +80,7 @@ jobs:
           id: count
           with:
             url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-            beforeScript: |
+            scriptBefore: |
               const xpathExpression = 'count(//p)';
               const xpathResult = document.evaluate(xpathExpression, document, null, XPathResult.STRING_TYPE, null);
               result = parseInt(xpathResult).stringValue
