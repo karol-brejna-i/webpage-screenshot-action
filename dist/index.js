@@ -28155,7 +28155,7 @@ const catchConsole = async function (page) {
 const puppetRun = async function (parameters) {
     core.info('Puppet run.');
 
-    const beforeScript = parameters['beforeScript'];
+    const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
 
     // XXX
@@ -28176,14 +28176,14 @@ const puppetRun = async function (parameters) {
             await page.goto(url);
 
             let result = undefined;
-            if (beforeScript) {
-                core.info('Using beforeScript parameter.');
+            if (scriptBefore) {
+                core.info('Using scriptBefore parameter.');
 
                 const runMyScript = __nccwpck_require__(4261);
                 try {
-                    result = await runMyScript(page, beforeScript);
+                    result = await runMyScript(page, scriptBefore);
                 } catch (error) {
-                    core.error(`Error in beforeScript: ${error.message}`);
+                    core.error(`Error in scriptBefore: ${error.message}`);
                     core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
                 }
                 core.info(`Result: ${result}`);
@@ -28257,14 +28257,14 @@ module.exports = {
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
-                const beforeScript = core.getInput('beforeScript');
+                const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
-                    beforeScript: beforeScript,
+                    scriptBefore: scriptBefore,
                     output: output
                 });
             }));

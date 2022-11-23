@@ -66,8 +66,8 @@ jobs:
               const headerElement = document.createElement("h1")
               headerElement.innerHTML = "!+!-+!-+!-+!-!";
               const xpathExpression = '//h1';
-              const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue
-              firstChild.parentNode.insertBefore(headerElement, firstChild)
+              const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+              firstChild.parentNode.insertBefore(headerElement, firstChild);
 
               result = "I made it!";
         - run: |
@@ -83,6 +83,6 @@ jobs:
             scriptBefore: |
               const xpathExpression = 'count(//p)';
               const xpathResult = document.evaluate(xpathExpression, document, null, XPathResult.STRING_TYPE, null);
-              result = parseInt(xpathResult).stringValue
+              result = parseInt(xpathResult.stringValue);
         - run: |
             ls

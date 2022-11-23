@@ -16,14 +16,14 @@ module.exports = {
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
-                const beforeScript = core.getInput('beforeScript');
+                const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
-                    beforeScript: beforeScript,
+                    scriptBefore: scriptBefore,
                     output: output
                 });
             }));

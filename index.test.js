@@ -48,7 +48,7 @@ test('test parameter for element', () => {
     }
 })
 
-test('test run without beforeScript', async() => {
+test('test run without scriptBefore', async() => {
     console.log("test parameter for element");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
@@ -59,11 +59,11 @@ test('test run without beforeScript', async() => {
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
 })
 
-test('test run with beforeScript', async() => {
+test('test run with scriptBefore', async() => {
     console.log("test parameter for element");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
-    process.env['INPUT_BEFORESCRIPT'] = 'result = 42;';
+    process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
@@ -71,11 +71,11 @@ test('test run with beforeScript', async() => {
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":42}'));
 })
 
-test('test run with faulty beforeScript', async() => {
+test('test run with faulty scriptBefore', async() => {
     console.log("test parameter for element");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
-    process.env['INPUT_BEFORESCRIPT'] = 'return 42;';
+    process.env['INPUT_SCRIPTBEFORE'] = 'return 42;';
     const ip = path.join(__dirname, 'index.js');
 
     try {
@@ -85,7 +85,7 @@ test('test run with faulty beforeScript', async() => {
         console.info("Expected fail.");
         console.log("Error: " + error.message);
 
-        await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in beforeScript'));
+        await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in scriptBefore'));
     }
 })
 
