@@ -72,3 +72,17 @@ jobs:
               result = "I made it!";
         - run: |
             ls
+
+    countParagraphs:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: karol-brejna-i/webpage-screenshot-action@develop
+          id: count
+          with:
+            url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+            beforeScript: |
+              const xpathExpression = 'count(//p)';
+              const xpathResult = document.evaluate(xpathExpression, document, null, XPathResult.STRING_TYPE, null);
+              result = parseInt(xpathResult).stringValue
+        - run: |
+            ls
