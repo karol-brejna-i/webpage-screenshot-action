@@ -1,0 +1,16 @@
+name: "Find the answer to the question of life, the universe, and everything 🦠🌌👽"
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  workflow_dispatch:
+
+jobs:
+    search:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: karol-brejna-i/webpage-screenshot-action@develop
+          id: answer
+          with:
+            url: https://en.wikipedia.org/wiki/42_(number)
+            scriptBefore: return 42;
+        - run: |
+            echo "${{ steps.answer.outputs.scriptResult }}"
