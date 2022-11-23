@@ -28190,6 +28190,12 @@ const puppetRun = async function (parameters) {
             return result;
         }
     ));
+
+    const resultObject = results.map((result, index) => {
+        return {url: urls[index], result: result};
+    });
+    core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
+    return resultObject;
 };
 
 module.exports = {catchConsole, puppetRun};
@@ -54740,11 +54746,8 @@ async function run() {
         const parametersValid = await tools.validateParameters(parameters);
         core.info(`Parameters valid: ${parametersValid}`);
 
-        await puppetRun(parameters);
-
-        core.info((new Date()).toTimeString());
-        core.setOutput('time', new Date().toTimeString());
-
+        const scriptResult = await puppetRun(parameters);
+        core.setOutput('scriptResult', scriptResult);
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);
