@@ -28,6 +28,7 @@ jobs:
         - run: |
             echo "${{ steps.screenshot.outputs.time }}"
             ls
+
     screenshotExternal:
       runs-on: ubuntu-latest
       steps:
@@ -47,5 +48,3 @@ jobs:
         - run: |
             echo "${{ steps.screenshot.outputs.time }}"
             ls
-
-
