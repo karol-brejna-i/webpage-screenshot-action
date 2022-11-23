@@ -28132,50 +28132,74 @@ function defaultCallback(err) {
 
 /***/ }),
 
-/***/ 2987:
+/***/ 9367:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(7174);
 
-module.exports = {
-    catchConsole: async function (page) {
-        page.on("pageerror", function (err) {
-            console.log(`Page error: ${err.toString()}`);
-        });
+const catchConsole = async function (page) {
+    page.on("pageerror", function (err) {
+        core.info(`Page error: ${err.toString()}`);
+    });
 
-        page.on('error', function (err) {
-            console.log('error happen at the page: ', err);
-        });
-        page.on('console', message => console.log(`${message.text()}`));
-    },
+    page.on('error', function (err) {
+        core.info(`Error: ${err.toString()}`);
+    });
 
-    puppetRun: async function (parameters) {
-        core.info("Puppet run.");
+    page.on('console', function (message) {
+        core.info(`>${message.text()}`);
+    });
+};
 
-        // start the headless browser
-        const browser = await puppeteer.launch();
-        const page = await browser.newPage();
-        // capture browser console, if required
-        await this.catchConsole(page);
+const puppetRun = async function (parameters) {
+    core.info('Puppet run.');
 
-        await page.goto(parameters['url']);
+    const beforeScript = parameters['beforeScript'];
+    const urls = [parameters['url']];
 
-        let result = undefined;
-        const beforeScript = core.getInput('beforeScript');
-        if (beforeScript) {
-            core.info("Using beforeScript parameter.");
-
-            const runMyScript = __nccwpck_require__(4261);
-            result = await runMyScript(page, beforeScript);
-            core.info("Result: " + result);
-        }
-
-        await page.screenshot({path: parameters.output, fullPage: false});
-        await browser.close();
+    // XXX
+    const launchOptions = {
+        executablePath: 'google-chrome-stable',
+        args: ['--no-sandbox'],
+        headless: true
     }
 
-}
+    const results = await Promise.all(urls.map(
+        async (url) => {
+            // start the headless browser
+            const browser = await puppeteer.launch(launchOptions);
+            const page = await browser.newPage();
+            // capture browser console, if required
+            await catchConsole(page);
+
+            await page.goto(url);
+
+            let result = undefined;
+            if (beforeScript) {
+                core.info('Using beforeScript parameter.');
+
+                const runMyScript = __nccwpck_require__(4261);
+                result = await runMyScript(page, beforeScript);
+                core.info(`Result: ${result}`);
+            }
+
+            await page.screenshot({path: parameters.output, fullPage: false});
+            await browser.close();
+
+            return result;
+        }
+    ));
+
+    const resultObject = results.map((result, index) => {
+        return {url: urls[index], result: result};
+    });
+    core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
+    return resultObject;
+};
+
+module.exports = {catchConsole, puppetRun};
+
 
 /***/ }),
 
@@ -28190,7 +28214,7 @@ let runMyScript = async function (page, theScript) {
 
     return await page.evaluate(async (element, script) => {
         return new Promise((resolve, reject) => {
-            console.info("script inside Promise: " + script);
+            // console.info(`script inside Promise: ${script}`);
             let result = undefined;
             // TODO: if (err) reject(err);
             eval(script);
@@ -28262,6 +28286,7 @@ module.exports = {
             }));
     }
 }
+
 
 /***/ }),
 
@@ -54712,21 +54737,17 @@ var __webpack_exports__ = {};
 (() => {
 const core = __nccwpck_require__(2186);
 const tools = __nccwpck_require__(109);
-const puppetTools = __nccwpck_require__(2987);
+const {puppetRun} = __nccwpck_require__(9367);
 
 async function run() {
     try {
         const parameters = await tools.getParameters();
-        core.info("Parameters: " + JSON.stringify(parameters));
+        core.info(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
-        core.info("Parameters valid: " + parametersValid);
+        core.info(`Parameters valid: ${parametersValid}`);
 
-        puppetTools.puppetRun(parameters);
-
-        core.info((new Date()).toTimeString());
-        core.setOutput('time', new Date().toTimeString());
-
-
+        const scriptResult = await puppetRun(parameters);
+        core.setOutput('scriptResult', scriptResult);
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);

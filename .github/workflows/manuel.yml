@@ -11,7 +11,7 @@ on:
         description: 'Script to run before the check'
         required: false
         type: multiline
-        default: ''
+        default: 'console.log("Hello world!");'
 
 jobs:
     screenshotLocal:
@@ -25,6 +25,10 @@ jobs:
           with:
             url: ${{ github.event.inputs.url }}
             scriptBefore: ${{ github.event.inputs.scriptBefore }}
+        - run: |
+            echo "${{ steps.screenshot.outputs.time }}"
+            ls
+
     screenshotExternal:
       runs-on: ubuntu-latest
       steps:
@@ -41,6 +45,6 @@ jobs:
           with:
             url: ${{ github.event.inputs.url }}
             scriptBefore: ${{ github.event.inputs.scriptBefore }}
-
-
-
+        - run: |
+            echo "${{ steps.screenshot.outputs.time }}"
+            ls

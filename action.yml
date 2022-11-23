@@ -1,6 +1,6 @@
 name: 'Webpage Screenshot'
 author: 'Karol Brejna'
-description: 'Take a screenshot of a webpage or its element. Optionall, run a script (in the browser) before taking the screenshot.'
+description: 'Take a screenshot of a webpage or its element. Optionally, run a script (in the browser) before taking the screenshot.'
 branding:
     icon: 'layout'
     color: 'blue'
@@ -39,8 +39,8 @@ inputs:
     default: screenshot.png
 
 outputs:
-  time: # output will be available to future steps
-    description: 'The current time after waiting'
+  scriptResult:
+    description: 'JSON string with the result of the script execution.'
 runs:
   using: 'node16'
   main: 'dist/index.js'
