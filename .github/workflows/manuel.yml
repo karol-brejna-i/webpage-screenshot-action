@@ -137,17 +137,9 @@ jobs:
       - run: |
           ls examples/
           cat examples/simple.html
-#      - uses: karol-brejna-i/webpage-screenshot-action@develop
-#        id: openLocalFile
-#        with:
-#          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-#          scriptBefore: |
-#            if (element.innerText.includes('World')) {
-#              console.log("Found!");
-#              result = true;
-#            } else {
-#              console.log("Not found!");
-#              result = false;
-#            }
-#      - run: |
-#          ls
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: openLocalFile
+        with:
+          url: file://${PWD}/examples/simple.html
+      - run: |
+          ls
