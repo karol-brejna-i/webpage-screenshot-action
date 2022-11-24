@@ -79,7 +79,7 @@ test('test run with faulty scriptBefore', async() => {
     const ip = path.join(__dirname, 'index.js');
 
     try {
-        const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+        cp.execSync(`node ${ip}`, {env: process.env}).toString();
         throw new Error('Should have failed');
     } catch (error) {
         console.info("Expected fail.");
@@ -88,4 +88,3 @@ test('test run with faulty scriptBefore', async() => {
         await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in scriptBefore'));
     }
 })
-

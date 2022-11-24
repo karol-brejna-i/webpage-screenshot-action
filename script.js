@@ -3,6 +3,7 @@ const core = require('@actions/core');
 let runMyScript = async function (page, theScript) {
     core.info('runMyScript');
     core.debug(theScript);
+    const bodyHandle = await page.$('body');
 
     return await page.evaluate(async (element, script) => {
         return new Promise((resolve, reject) => {
@@ -16,7 +17,7 @@ let runMyScript = async function (page, theScript) {
             resolve(result);
         });
 
-    }, page, theScript);
+    }, bodyHandle, theScript);
 }
 
 module.exports = runMyScript;

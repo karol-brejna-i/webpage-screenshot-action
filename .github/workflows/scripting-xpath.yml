@@ -1,0 +1,56 @@
+name: "Example usage of browser scripting (xpath expressions)"
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  workflow_dispatch:
+
+jobs:
+  insert:
+    name: Insert DOM element before first <h1>
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: screenshot
+        with:
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          scriptBefore: |
+            const headerElement = document.createElement("h1");
+            headerElement.innerHTML = "!+!-+!-+!-+!-!";
+            const xpathExpression = '//h1';
+            const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+            firstChild.parentNode.insertBefore(headerElement, firstChild);
+            
+            result = "I made it!";
+      - run: |
+          ls
+
+  countParagraphs:
+    name: Count <p> elements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: count
+        with:
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          scriptBefore: |
+            const xpathExpression = 'count(//p)';
+            const xpathResult = document.evaluate(xpathExpression, document, null, XPathResult.STRING_TYPE, null);
+            result = parseInt(xpathResult.stringValue);
+      - run: |
+          ls
+
+  checkText:
+    name: Count <p> elements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: count
+        with:
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          scriptBefore: |
+            if (element.innerText.includes('World')) { 
+              console.log("Found!");
+            }
+            
+            result = element.innerText;
+      - run: |
+          ls

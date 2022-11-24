@@ -63,7 +63,7 @@ jobs:
           with:
             url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
             scriptBefore: |
-              const headerElement = document.createElement("h1")
+              const headerElement = document.createElement("h1");
               headerElement.innerHTML = "!+!-+!-+!-+!-!";
               const xpathExpression = '//h1';
               const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;

@@ -28181,7 +28181,7 @@ const puppetRun = async function (parameters) {
 
                 const runMyScript = __nccwpck_require__(4261);
                 try {
-                    result = await runMyScript(page, scriptBefore);
+                    result = await runMyScript(runMyScript, scriptBefore);
                 } catch (error) {
                     core.error(`Error in scriptBefore: ${error.message}`);
                     core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
@@ -28216,6 +28216,7 @@ const core = __nccwpck_require__(2186);
 let runMyScript = async function (page, theScript) {
     core.info('runMyScript');
     core.debug(theScript);
+    const bodyHandle = await page.$('body');
 
     return await page.evaluate(async (element, script) => {
         return new Promise((resolve, reject) => {
@@ -28229,7 +28230,7 @@ let runMyScript = async function (page, theScript) {
             resolve(result);
         });
 
-    }, page, theScript);
+    }, bodyHandle, theScript);
 }
 
 module.exports = runMyScript;
