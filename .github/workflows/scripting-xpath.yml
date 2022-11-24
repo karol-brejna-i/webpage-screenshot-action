@@ -37,20 +37,3 @@ jobs:
             result = parseInt(xpathResult.stringValue);
       - run: |
           ls
-
-  checkText:
-    name: Count <p> elements
-    runs-on: ubuntu-latest
-    steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        id: count
-        with:
-          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-          scriptBefore: |
-            if (element.innerText.includes('World')) { 
-              console.log("Found!");
-            }
-            
-            result = element.innerText;
-      - run: |
-          ls

@@ -108,7 +108,7 @@ jobs:
           ls
 
   checkText:
-    name: Count <p> elements
+    name: Check if given test is present in the page (here, we are looking for 'World')
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
@@ -118,8 +118,36 @@ jobs:
           scriptBefore: |
             if (element.innerText.includes('World')) { 
               console.log("Found!");
+              result = true;
+            } else {
+              console.log("Not found!");
+              result = false;
             }
-            
-            result = element.innerText;
       - run: |
           ls
+
+  localFile:
+    name: Use local file (html file in the local filesystem)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        id: checkout
+        with:
+          ref: develop
+      - run: |
+          ls examples/
+          cat examples/simple.html
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        id: openLocalFile
+#        with:
+#          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+#          scriptBefore: |
+#            if (element.innerText.includes('World')) {
+#              console.log("Found!");
+#              result = true;
+#            } else {
+#              console.log("Not found!");
+#              result = false;
+#            }
+#      - run: |
+#          ls

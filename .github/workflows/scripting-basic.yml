@@ -1,0 +1,37 @@
+name: "Manual run of the action"
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  workflow_dispatch:
+
+jobs:
+  checkText:
+    name: Check if given test is present in the page (here, we are looking for 'World')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: count
+        with:
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          scriptBefore: |
+            if (element.innerText.includes('World')) { 
+              console.log("Found!");
+              result = true;
+            } else {
+              console.log("Not found!");
+              result = false;
+            }
+      - run: |
+          ls
+  countParagraphs:
+    name: Count <p> elements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: count
+        with:
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/develop/examples/simple.html
+          scriptBefore: |
+            
+            result = parseInt(xpathResult.stringValue);
+      - run: |
+          ls
