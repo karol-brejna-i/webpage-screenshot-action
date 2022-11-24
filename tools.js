@@ -45,8 +45,6 @@ module.exports = {
                     if (!parametersJson.xpath && !parametersJson.selector) {
                         throw Error(`Please provide xpath or selector for '${parametersJson.mode} mode.`);
                     }
-                } else if (parametersJson.mode === 'script') {
-                    throw Error(`Script mode is not implemented yet.`);
                 }
 
                 resolve(true);

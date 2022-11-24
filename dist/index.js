@@ -28181,7 +28181,7 @@ const puppetRun = async function (parameters) {
 
                 const runMyScript = __nccwpck_require__(4261);
                 try {
-                    result = await runMyScript(runMyScript, scriptBefore);
+                    result = await runMyScript(page, scriptBefore);
                 } catch (error) {
                     core.error(`Error in scriptBefore: ${error.message}`);
                     core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
@@ -28235,6 +28235,7 @@ let runMyScript = async function (page, theScript) {
 
 module.exports = runMyScript;
 
+
 /***/ }),
 
 /***/ 109:
@@ -28287,8 +28288,6 @@ module.exports = {
                     if (!parametersJson.xpath && !parametersJson.selector) {
                         throw Error(`Please provide xpath or selector for '${parametersJson.mode} mode.`);
                     }
-                } else if (parametersJson.mode === 'script') {
-                    throw Error(`Script mode is not implemented yet.`);
                 }
 
                 resolve(true);
