@@ -3,6 +3,7 @@ const cp = require('child_process');
 const path = require('path');
 const tools = require('./tools');
 
+
 test('default mode', async () => {
     console.log("default mode");
     delete process.env['INPUT_MODE']
@@ -46,10 +47,10 @@ test('test parameter for element', () => {
         console.info("Expected fail.");
         console.log("Error: " + error.message);
     }
-})
+});
 
-test('test run without scriptBefore', async() => {
-    console.log("test parameter for element");
+test('test run without scriptBefore', async () => {
+    console.log("test run without scriptBefore");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
@@ -57,10 +58,10 @@ test('test run without scriptBefore', async() => {
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
-})
+});
 
-test('test run with scriptBefore', async() => {
-    console.log("test parameter for element");
+test('test run with scriptBefore', async () => {
+    console.log("-test run with scriptBefore");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
@@ -69,10 +70,10 @@ test('test run with scriptBefore', async() => {
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":42}'));
-})
+});
 
-test('test run with faulty scriptBefore', async() => {
-    console.log("test parameter for element");
+test('test run with faulty scriptBefore', async () => {
+    console.log('test run with faulty scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'return 42;';
@@ -87,4 +88,29 @@ test('test run with faulty scriptBefore', async() => {
 
         await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in scriptBefore'));
     }
-})
+});
+
+const TIMEOUT = 10000;
+test('test run with faulty url', async () => {
+    console.log('test run with faulty url');
+    process.env['INPUT_URL'] = 'malformed';
+    const ip = path.join(__dirname, 'index.js');
+
+    const options = {
+        timeout: TIMEOUT,
+        killSignal: 'SIGKILL',
+        env: process.env
+    }
+
+    cp.exec(`node ${ip}`, options, function (err, stout, stderr) {
+        if (err) {
+            console.log('Child process exited with error code', err);
+            throw new Error('Command failed. Probably timeouted.');
+        } else {
+            console.log('Child process exited with success code!');
+        }
+    });
+    console.log('waiting for timeout');
+
+    await new Promise(resolve => setTimeout(resolve, TIMEOUT + 500));
+}, TIMEOUT + 1000);
