@@ -32,6 +32,7 @@ const puppetRun = async function (parameters) {
     // start the headless browser
     const browser = await puppeteer.launch(launchOptions);
 
+    // TODO: "Promise me, it will look more like an async javascript" -- Promise
     // make promises for all required shots
     const promises = urls.map(
         async (url) => {
@@ -77,9 +78,7 @@ const puppetRun = async function (parameters) {
         return {url: urls[index], result: result};
     });
 
-
     await browser.close();
-
 
     core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
     return resultObject;

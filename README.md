@@ -64,7 +64,7 @@ Let's consider the following use cases for the action:
   - Returning a [value](#returning-a-value) from the script
   - Counting the number of elements on a page
   - Checking if given text is present in the page
-  - Manipulating DOM (insert= element before first <h1>)
+  - Manipulating DOM (insert element before first \<h1\>)
 
 
 ## License

@@ -5,9 +5,9 @@ const {puppetRun} = require('./puppets');
 async function run() {
     try {
         const parameters = await tools.getParameters();
-        core.info(`Parameters: ${JSON.stringify(parameters)}`);
+        core.debug(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
-        core.info(`Parameters valid: ${parametersValid}`);
+        core.debug(`Parameters valid: ${parametersValid}`);
 
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
