@@ -3,6 +3,7 @@ const cp = require('child_process');
 const path = require('path');
 const tools = require('./tools');
 
+
 test('default mode', async () => {
     console.log("default mode");
     delete process.env['INPUT_MODE']
@@ -12,11 +13,18 @@ test('default mode', async () => {
 });
 
 test('non-default mode', async () => {
-    console.log("non-default mode");
+    console.log('non-default mode');
     process.env['INPUT_MODE'] = 'element';
     const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).not.toBe('wholePage');
+});
+
+test('malformed URL input', async () => {
+    console.log('malformed URL input');
+    process.env['INPUT_URL'] = 'malformed';
+    const parameters = await tools.getParameters()
+    await expect(tools.validateParameters(parameters)).rejects.toThrow('Please, provide a valid URL.');
 });
 
 test('Fail without URL', async () => {
@@ -42,16 +50,14 @@ test('test parameter for element', () => {
     try {
         const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
         console.log(result);
-
-
     } catch (error) {
         console.info("Expected fail.");
         console.log("Error: " + error.message);
     }
-})
+});
 
-test('test run without beforeScript', async() => {
-    console.log("test parameter for element");
+test('test run without scriptBefore', async () => {
+    console.log("test run without scriptBefore");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
@@ -59,16 +65,68 @@ test('test run without beforeScript', async() => {
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
-})
+});
 
-test('test run with beforeScript', async() => {
-    console.log("test parameter for element");
+test('test run with scriptBefore', async () => {
+    console.log("-test run with scriptBefore");
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
-    process.env['INPUT_BEFORESCRIPT'] = 'result = 42;';
+    process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
     await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":42}'));
-})
+});
+
+test('test run with faulty scriptBefore', async () => {
+    console.log('test run with faulty scriptBefore');
+    process.env['INPUT_URL'] = 'https://google.com';
+    process.env['INPUT_MODE'] = 'element';
+    process.env['INPUT_SCRIPTBEFORE'] = 'return 42;';
+    const ip = path.join(__dirname, 'index.js');
+
+    try {
+        cp.execSync(`node ${ip}`, {env: process.env}).toString();
+        throw new Error('Should have failed');
+    } catch (error) {
+        console.info("Expected fail.");
+        console.log("Error: " + error.message);
+
+        await expect(error.stdout.toString()).toEqual(expect.stringContaining('::error::Error in scriptBefore'));
+    }
+});
+
+const TIMEOUT = 10000;
+test('test run with faulty url', async () => {
+    console.log('test run with faulty url');
+
+    // the URL is technically valid, but it's not reachable
+    process.env['INPUT_URL'] = 'https://ąśćżź.pl';
+    const ip = path.join(__dirname, 'index.js');
+
+    const options = {
+        timeout: TIMEOUT,
+        killSignal: 'SIGKILL',
+        env: process.env
+    }
+
+    cp.exec(`node ${ip}`, options, function (err, stout, stderr) {
+        if (err) {
+            console.log('Child process exited with error code', err);
+            console.log('stderr: ' + stderr);
+            console.log('stdout: ' + stout);
+
+            if (err.killed) {
+                throw new Error('Command failed. Probably timeouted.');
+            } else {
+                throw new Error('Command failed.');
+            }
+        } else {
+            console.log('Child process exited with success code!');
+        }
+    });
+    console.log('waiting for timeout');
+
+    await new Promise(resolve => setTimeout(resolve, TIMEOUT + 500));
+}, TIMEOUT + 1000);
