@@ -22,16 +22,15 @@ jobs:
             }
       - run: |
           ls
-  countParagraphs:
-    name: Count <p> elements
+  countHeaders:
+    name: Count <h2> elements
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: count
         with:
-          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/develop/examples/simple.html
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
           scriptBefore: |
-            
-            result = parseInt(xpathResult.stringValue);
+            result = document.querySelectorAll('h2').length
       - run: |
           ls
