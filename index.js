@@ -12,7 +12,7 @@ async function run() {
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
 
-        core.info('Webpage Screenshot Action finished successfully.');
+        core.info('Webpage Screenshot Action finished.');
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);

@@ -120,7 +120,7 @@ test('test run with faulty url', async () => {
             if (err.killed) {
                 throw new Error('Command failed. Probably timeouted.');
             } else {
-                throw new Error('Command failed.');
+                console.log(`Command failed. It should with this url ${process.env['INPUT_URL']}.`);
             }
         } else {
             console.log('Child process exited with success code!');

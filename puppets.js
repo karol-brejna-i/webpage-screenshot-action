@@ -28,11 +28,13 @@ const puppetRun = async function (parameters) {
         headless: true
     }
 
+
+    // start the headless browser
+    const browser = await puppeteer.launch(launchOptions);
+
     // make promises for all required shots
     const promises = urls.map(
         async (url) => {
-            // start the headless browser
-            const browser = await puppeteer.launch(launchOptions);
             const page = await browser.newPage();
             // capture browser console, if required
             await catchConsole(page);
@@ -45,6 +47,7 @@ const puppetRun = async function (parameters) {
                 response = await page.goto(url);
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
+                core.setFailed(error.message)
                 result = {"error": error.message};
             }
 
@@ -64,8 +67,6 @@ const puppetRun = async function (parameters) {
                 await page.screenshot({path: parameters.output, fullPage: false});
             }
 
-            await browser.close();
-
             return result;
         });
 
@@ -75,6 +76,10 @@ const puppetRun = async function (parameters) {
     const resultObject = results.map((result, index) => {
         return {url: urls[index], result: result};
     });
+
+
+    await browser.close();
+
 
     core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
     return resultObject;

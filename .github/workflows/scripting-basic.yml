@@ -1,11 +1,11 @@
-name: "Manual run of the action"
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: "Browser scripting - basic"
+run-name: ${{ github.actor }} is trying basic scripting 🚀
 on:
   workflow_dispatch:
 
 jobs:
   checkText:
-    name: Check if given test is present in the page (here, we are looking for 'World')
+    name: Check if given text is present in the page (here, we are looking for 'World')
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
