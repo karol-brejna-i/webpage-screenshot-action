@@ -28137,7 +28137,6 @@ function defaultCallback(err) {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(7174);
-const runMyScript = __nccwpck_require__(4261);
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -28159,13 +28158,14 @@ const puppetRun = async function (parameters) {
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
 
-    // XXX
+    // TODO make it right
     const launchOptions = {
         executablePath: 'google-chrome-stable',
         args: ['--no-sandbox'],
         headless: true
     }
 
+    // make promises for all required shots
     const promises = urls.map(
         async (url) => {
             // start the headless browser
@@ -28174,33 +28174,45 @@ const puppetRun = async function (parameters) {
             // capture browser console, if required
             await catchConsole(page);
 
-            await page.goto(url); // XXX TODO: if this fails, the script will hang; probably need to use Promise result
-
+            // for result construction
             let result = undefined;
-            if (scriptBefore) {
-                core.info('Using scriptBefore parameter.');
 
-                const runMyScript = __nccwpck_require__(4261);
-                try {
-                    result = await runMyScript(page, scriptBefore);
-                } catch (error) {
-                    core.error(`Error in scriptBefore: ${error.message}`);
-                    core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
-                }
-                core.info(`Result: ${result}`);
+            let response;
+            try {
+                response = await page.goto(url);
+            } catch (error) {
+                console.log('page.goto() resulted in error: ' + error);
+                result = {"error": error.message};
             }
 
-            await page.screenshot({path: parameters.output, fullPage: false});
+            if (response) {
+                if (scriptBefore) {
+                    core.info('Using scriptBefore parameter.');
+
+                    const runMyScript = __nccwpck_require__(4261);
+                    try {
+                        result = await runMyScript(page, scriptBefore);
+                    } catch (error) {
+                        core.error(`Error in scriptBefore: ${error.message}`);
+                        core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
+                    }
+                    core.info(`Result: ${result}`);
+                }
+                await page.screenshot({path: parameters.output, fullPage: false});
+            }
+
             await browser.close();
 
             return result;
         });
+
 
     const results = await Promise.all(promises);
 
     const resultObject = results.map((result, index) => {
         return {url: urls[index], result: result};
     });
+
     core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
     return resultObject;
 };
@@ -28273,7 +28285,16 @@ module.exports = {
                 });
             }));
     },
+    checkUrl: function(url) {
+        console.log('checkUrl: ' + url);
 
+        try {
+            const result = new URL(url)
+            return Boolean(result);
+        } catch (error) {
+            return false;
+        }
+    },
     validateParameters: async function (parametersJson) {
         return new Promise(
             (resolve => {
@@ -28284,6 +28305,11 @@ module.exports = {
 
                 if (!parametersJson.url) {
                     throw Error('Please provide a URL.');
+                }
+
+                if (!this.checkUrl(parametersJson.url)) {
+                    core.info('Invalid URL: ' + parametersJson.url);
+                    throw Error('Please, provide a valid URL.')
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
@@ -54758,11 +54784,19 @@ async function run() {
 
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
+
+        core.info('Webpage Screenshot Action finished successfully.');
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);
+        core.info('Webpage Screenshot Action failed.');
     }
 }
+
+process.on('unhandledRejection', (reason, p) => {
+    console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
+    // application specific logging, throwing an error, or other logic here   process.exit(1); });
+});
 
 run();
 

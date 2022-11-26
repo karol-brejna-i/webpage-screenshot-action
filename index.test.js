@@ -13,11 +13,18 @@ test('default mode', async () => {
 });
 
 test('non-default mode', async () => {
-    console.log("non-default mode");
+    console.log('non-default mode');
     process.env['INPUT_MODE'] = 'element';
     const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).not.toBe('wholePage');
+});
+
+test('malformed URL input', async () => {
+    console.log('malformed URL input');
+    process.env['INPUT_URL'] = 'malformed';
+    const parameters = await tools.getParameters()
+    await expect(tools.validateParameters(parameters)).rejects.toThrow('Please, provide a valid URL.');
 });
 
 test('Fail without URL', async () => {
@@ -93,7 +100,9 @@ test('test run with faulty scriptBefore', async () => {
 const TIMEOUT = 10000;
 test('test run with faulty url', async () => {
     console.log('test run with faulty url');
-    process.env['INPUT_URL'] = 'malformed';
+
+    // the URL is technically valid, but it's not reachable
+    process.env['INPUT_URL'] = 'https://ąśćżź.pl';
     const ip = path.join(__dirname, 'index.js');
 
     const options = {
@@ -105,7 +114,14 @@ test('test run with faulty url', async () => {
     cp.exec(`node ${ip}`, options, function (err, stout, stderr) {
         if (err) {
             console.log('Child process exited with error code', err);
-            throw new Error('Command failed. Probably timeouted.');
+            console.log('stderr: ' + stderr);
+            console.log('stdout: ' + stout);
+
+            if (err.killed) {
+                throw new Error('Command failed. Probably timeouted.');
+            } else {
+                throw new Error('Command failed.');
+            }
         } else {
             console.log('Child process exited with success code!');
         }

@@ -28,7 +28,16 @@ module.exports = {
                 });
             }));
     },
+    checkUrl: function(url) {
+        console.log('checkUrl: ' + url);
 
+        try {
+            const result = new URL(url)
+            return Boolean(result);
+        } catch (error) {
+            return false;
+        }
+    },
     validateParameters: async function (parametersJson) {
         return new Promise(
             (resolve => {
@@ -39,6 +48,11 @@ module.exports = {
 
                 if (!parametersJson.url) {
                     throw Error('Please provide a URL.');
+                }
+
+                if (!this.checkUrl(parametersJson.url)) {
+                    core.info('Invalid URL: ' + parametersJson.url);
+                    throw Error('Please, provide a valid URL.')
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
