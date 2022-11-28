@@ -1,5 +1,6 @@
 const core = require('@actions/core');
 const puppeteer = require('puppeteer');
+const os = require("os");
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -15,6 +16,36 @@ const catchConsole = async function (page) {
     });
 };
 
+
+const getBrowserPath = async function () {
+    const type = os.type();
+    let browserPath = undefined;
+    switch (type) {
+        case 'Windows_NT': {
+            const programFiles =
+                os.arch() === 'x64'
+                    ? process.env['PROGRAMFILES(X86)']
+                    : process.env.PROGRAMFILES;
+            browserPath = path.join(
+                programFiles,
+                'Google/Chrome/Application/chrome.exe'
+            );
+            break;
+        }
+        case 'Darwin': {
+            browserPath =
+                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+            break;
+        }
+        case 'Linux':
+        default: {
+            browserPath = '/usr/bin/google-chrome';
+            break;
+        }
+    }
+    return browserPath;
+}
+
 const puppetRun = async function (parameters) {
     core.info('Puppet run.');
 
@@ -23,7 +54,7 @@ const puppetRun = async function (parameters) {
 
     // TODO make it right
     const launchOptions = {
-        executablePath: 'google-chrome-stable',
+        executablePath: await getBrowserPath(),
         args: ['--no-sandbox'],
         headless: true
     }
