@@ -33,4 +33,3 @@ jobs:
           scriptBefore: |
             result = document.querySelectorAll('h2').length
       - run: |
-          ls
