@@ -73,7 +73,7 @@ jobs:
       - run: |
           ls
 
-  localFile:
+  local_file:
     name: Use local file (html file in the local filesystem)
     runs-on: ubuntu-latest
     steps:
