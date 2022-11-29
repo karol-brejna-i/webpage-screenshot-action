@@ -20,13 +20,20 @@ const catchConsole = async function (page) {
 
 const getBrowserPath = async function () {
     const type = os.type();
+
+    core.info("OS type: " + type);
+    core.info("OS platform: " + os.platform());
+    core.info("OS release: " + os.release());
+    core.info("OS arch: " + os.arch());
+    core.info("OS version: " + os.version());
+    core.info(process.env['PROGRAMFILES(X86)']);
+    core.info(process.env['PROGRAMFILES']);;
+
     let browserPath = undefined;
     switch (type) {
         case 'Windows_NT': {
-            const programFiles =
-                os.arch() === 'x64'
-                    ? process.env['PROGRAMFILES(X86)']
-                    : process.env.PROGRAMFILES;
+            const programFiles = process.env.PROGRAMFILES; // was:
+                // os.arch() === 'x64' ? process.env['PROGRAMFILES(X86)'] : process.env.PROGRAMFILES;
             browserPath = path.join(
                 programFiles,
                 'Google/Chrome/Application/chrome.exe'
