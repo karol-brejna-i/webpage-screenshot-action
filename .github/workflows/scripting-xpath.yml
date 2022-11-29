@@ -1,5 +1,5 @@
-name: "Example usage of browser scripting (xpath expressions)"
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: "Browser scripting - xpath expressions)"
+run-name: ${{ github.actor }} is trying xpath expressions 🚀
 on:
   workflow_dispatch:
 

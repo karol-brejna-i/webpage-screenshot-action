@@ -1,11 +1,11 @@
-name: "Manual run of the action"
-run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+name: "Browser scripting - basic"
+run-name: ${{ github.actor }} is trying basic scripting 🚀
 on:
   workflow_dispatch:
 
 jobs:
   checkText:
-    name: Check if given test is present in the page (here, we are looking for 'World')
+    name: Check if given text is present in the page (here, we are looking for 'World')
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
@@ -22,16 +22,14 @@ jobs:
             }
       - run: |
           ls
-  countParagraphs:
-    name: Count <p> elements
+  countHeaders:
+    name: Count <h2> elements
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: count
         with:
-          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/develop/examples/simple.html
+          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
           scriptBefore: |
-            
-            result = parseInt(xpathResult.stringValue);
+            result = document.querySelectorAll('h2').length
       - run: |
-          ls

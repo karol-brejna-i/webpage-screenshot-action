@@ -28137,6 +28137,8 @@ function defaultCallback(err) {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(7174);
+const os = __nccwpck_require__(2037);
+const path = __nccwpck_require__(1017);
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -28152,6 +28154,31 @@ const catchConsole = async function (page) {
     });
 };
 
+
+const getBrowserPath = async function () {
+    const type = os.type();
+
+    let browserPath = undefined;
+    switch (type) {
+        case 'Windows_NT': {
+            const programFiles = process.env.PROGRAMFILES;
+            browserPath = path.join(programFiles, 'Google/Chrome/Application/chrome.exe');
+            break;
+        }
+        case 'Darwin': {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+            break;
+        }
+        case 'Linux':
+        default: {
+            browserPath = '/usr/bin/google-chrome';
+            break;
+        }
+    }
+    core.debug('Browser path: ' + browserPath);
+    return browserPath;
+}
+
 const puppetRun = async function (parameters) {
     core.info('Puppet run.');
 
@@ -28160,16 +28187,19 @@ const puppetRun = async function (parameters) {
 
     // TODO make it right
     const launchOptions = {
-        executablePath: 'google-chrome-stable',
+        executablePath: await getBrowserPath(),
         args: ['--no-sandbox'],
         headless: true
     }
 
+
+    // start the headless browser
+    const browser = await puppeteer.launch(launchOptions);
+
+    // TODO: "Promise me, it will look more like an async javascript" -- Promise
     // make promises for all required shots
     const promises = urls.map(
         async (url) => {
-            // start the headless browser
-            const browser = await puppeteer.launch(launchOptions);
             const page = await browser.newPage();
             // capture browser console, if required
             await catchConsole(page);
@@ -28182,6 +28212,7 @@ const puppetRun = async function (parameters) {
                 response = await page.goto(url);
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
+                core.setFailed(error.message)
                 result = {"error": error.message};
             }
 
@@ -28201,17 +28232,16 @@ const puppetRun = async function (parameters) {
                 await page.screenshot({path: parameters.output, fullPage: false});
             }
 
-            await browser.close();
-
             return result;
         });
-
 
     const results = await Promise.all(promises);
 
     const resultObject = results.map((result, index) => {
         return {url: urls[index], result: result};
     });
+
+    await browser.close();
 
     core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
     return resultObject;
@@ -29858,7 +29888,7 @@ class Page extends EventEmitter_js_1.EventEmitter {
      *
      * - `height`: page's height in pixels
      *
-     * - `deviceScalarFactor`: Specify device scale factor (can be though of as
+     * - `deviceScaleFactor`: Specify device scale factor (can be though of as
      *   dpr). Defaults to `1`.
      *
      * - `isMobile`: Whether the meta viewport tag is taken into account. Defaults
@@ -29973,6 +30003,48 @@ exports.unitToPixels = {
     mm: 3.78,
 };
 //# sourceMappingURL=Page.js.map
+
+/***/ }),
+
+/***/ 1742:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__nccwpck_require__(3469), exports);
+__exportStar(__nccwpck_require__(2185), exports);
+__exportStar(__nccwpck_require__(2194), exports);
+//# sourceMappingURL=api.js.map
 
 /***/ }),
 
@@ -30431,9 +30503,7 @@ _AXNode_richlyEditable = new WeakMap(), _AXNode_editable = new WeakMap(), _AXNod
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ariaHandler = void 0;
 const assert_js_1 = __nccwpck_require__(7729);
-const ElementHandle_js_1 = __nccwpck_require__(865);
-const Frame_js_1 = __nccwpck_require__(1106);
-const IsolatedWorld_js_1 = __nccwpck_require__(5651);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 async function queryAXTree(client, element, accessibleName, role) {
     const { nodes } = await client.send('Accessibility.queryAXTree', {
         objectId: element.remoteObject().objectId,
@@ -30490,36 +30560,37 @@ const queryOne = async (element, selector) => {
     if (!id) {
         return null;
     }
-    return (await element.frame.worlds[IsolatedWorld_js_1.MAIN_WORLD].adoptBackendNode(id));
+    return (await element.frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD].adoptBackendNode(id));
 };
 const waitFor = async (elementOrFrame, selector, options) => {
     let frame;
     let element;
-    if (elementOrFrame instanceof Frame_js_1.Frame) {
+    if ('isOOPFrame' in elementOrFrame) {
         frame = elementOrFrame;
     }
     else {
         frame = elementOrFrame.frame;
-        element = await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].adoptHandle(elementOrFrame);
+        element = await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].adoptHandle(elementOrFrame);
     }
     const ariaQuerySelector = async (selector) => {
-        const id = await queryOneId(element || (await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].document()), selector);
+        const id = await queryOneId(element || (await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].document()), selector);
         if (!id) {
             return null;
         }
-        return (await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].adoptBackendNode(id));
+        return (await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].adoptBackendNode(id));
     };
-    const result = await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD]._waitForSelectorInPage((_, selector) => {
+    const result = await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD]._waitForSelectorInPage((_, selector) => {
         return globalThis.ariaQuerySelector(selector);
     }, element, selector, options, new Map([['ariaQuerySelector', ariaQuerySelector]]));
     if (element) {
         await element.dispose();
     }
-    if (!(result instanceof ElementHandle_js_1.ElementHandle)) {
+    const handle = result === null || result === void 0 ? void 0 : result.asElement();
+    if (!handle) {
         await (result === null || result === void 0 ? void 0 : result.dispose());
         return null;
     }
-    return result.frame.worlds[IsolatedWorld_js_1.MAIN_WORLD].transferHandle(result);
+    return handle.frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD].transferHandle(handle);
 };
 const queryAll = async (element, selector) => {
     const exeCtx = element.executionContext();
@@ -31629,6 +31700,31 @@ _ChromeTargetManager_connection = new WeakMap(), _ChromeTargetManager_discovered
 
 /***/ }),
 
+/***/ 3110:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=Configuration.js.map
+
+/***/ }),
+
 /***/ 370:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -32038,6 +32134,31 @@ function isTargetClosedError(err) {
 }
 exports.isTargetClosedError = isTargetClosedError;
 //# sourceMappingURL=Connection.js.map
+
+/***/ }),
+
+/***/ 1153:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2020 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=ConnectionTransport.js.map
 
 /***/ }),
 
@@ -36084,6 +36205,7 @@ exports.Frame = void 0;
 const assert_js_1 = __nccwpck_require__(7729);
 const ErrorLike_js_1 = __nccwpck_require__(2937);
 const IsolatedWorld_js_1 = __nccwpck_require__(5651);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const LifecycleWatcher_js_1 = __nccwpck_require__(2169);
 const QueryHandler_js_1 = __nccwpck_require__(3200);
 const util_js_1 = __nccwpck_require__(8274);
@@ -36174,8 +36296,8 @@ class Frame {
     updateClient(client) {
         __classPrivateFieldSet(this, _Frame_client, client, "f");
         this.worlds = {
-            [IsolatedWorld_js_1.MAIN_WORLD]: new IsolatedWorld_js_1.IsolatedWorld(this),
-            [IsolatedWorld_js_1.PUPPETEER_WORLD]: new IsolatedWorld_js_1.IsolatedWorld(this),
+            [IsolatedWorlds_js_1.MAIN_WORLD]: new IsolatedWorld_js_1.IsolatedWorld(this),
+            [IsolatedWorlds_js_1.PUPPETEER_WORLD]: new IsolatedWorld_js_1.IsolatedWorld(this),
         };
     }
     /**
@@ -36324,7 +36446,7 @@ class Frame {
      * @internal
      */
     executionContext() {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].executionContext();
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].executionContext();
     }
     /**
      * Behaves identically to {@link Page.evaluateHandle} except it's run within
@@ -36333,7 +36455,7 @@ class Frame {
      * @see {@link Page.evaluateHandle} for details.
      */
     async evaluateHandle(pageFunction, ...args) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].evaluateHandle(pageFunction, ...args);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].evaluateHandle(pageFunction, ...args);
     }
     /**
      * Behaves identically to {@link Page.evaluate} except it's run within the
@@ -36342,7 +36464,7 @@ class Frame {
      * @see {@link Page.evaluate} for details.
      */
     async evaluate(pageFunction, ...args) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].evaluate(pageFunction, ...args);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].evaluate(pageFunction, ...args);
     }
     /**
      * Queries the frame for an element matching the given selector.
@@ -36352,7 +36474,7 @@ class Frame {
      * matching the given selector. Otherwise, `null`.
      */
     async $(selector) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].$(selector);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].$(selector);
     }
     /**
      * Queries the frame for all elements matching the given selector.
@@ -36362,7 +36484,7 @@ class Frame {
      * elements matching the given selector.
      */
     async $$(selector) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].$$(selector);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].$$(selector);
     }
     /**
      * Runs the given function on the first element matching the given selector in
@@ -36385,7 +36507,7 @@ class Frame {
      * @returns A promise to the result of the function.
      */
     async $eval(selector, pageFunction, ...args) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].$eval(selector, pageFunction, ...args);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].$eval(selector, pageFunction, ...args);
     }
     /**
      * Runs the given function on an array of elements matching the given selector
@@ -36408,7 +36530,7 @@ class Frame {
      * @returns A promise to the result of the function.
      */
     async $$eval(selector, pageFunction, ...args) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].$$eval(selector, pageFunction, ...args);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].$$eval(selector, pageFunction, ...args);
     }
     /**
      * @deprecated Use {@link Frame.$$} with the `xpath` prefix.
@@ -36421,7 +36543,7 @@ class Frame {
      * @param expression - the XPath expression to evaluate.
      */
     async $x(expression) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].$x(expression);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].$x(expression);
     }
     /**
      * Waits for an element matching the given selector to appear in the frame.
@@ -36525,13 +36647,13 @@ class Frame {
      * @returns the promise which resolve when the `pageFunction` returns a truthy value.
      */
     waitForFunction(pageFunction, options = {}, ...args) {
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].waitForFunction(pageFunction, options, ...args);
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].waitForFunction(pageFunction, options, ...args);
     }
     /**
      * @returns The full HTML contents of the frame, including the DOCTYPE.
      */
     async content() {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].content();
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].content();
     }
     /**
      * Set the content of the frame.
@@ -36541,7 +36663,7 @@ class Frame {
      * what point to consider the content setting successful.
      */
     async setContent(html, options = {}) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].setContent(html, options);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].setContent(html, options);
     }
     /**
      * @returns The frame's `name` attribute as specified in the tag.
@@ -36608,7 +36730,7 @@ class Frame {
             content += `//# sourceURL=${path.replace(/\n/g, '')}`;
         }
         type = type !== null && type !== void 0 ? type : 'text/javascript';
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].transferHandle(await this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].evaluateHandle(async ({ createDeferredPromise }, { url, id, type, content }) => {
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].transferHandle(await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].evaluateHandle(async ({ createDeferredPromise }, { url, id, type, content }) => {
             const promise = createDeferredPromise();
             const script = document.createElement('script');
             script.type = type;
@@ -36632,7 +36754,7 @@ class Frame {
             document.head.appendChild(script);
             await promise;
             return script;
-        }, await this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].puppeteerUtil, { ...options, type, content }));
+        }, await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].puppeteerUtil, { ...options, type, content }));
     }
     async addStyleTag(options) {
         let { content = '' } = options;
@@ -36655,7 +36777,7 @@ class Frame {
             content += '/*# sourceURL=' + path.replace(/\n/g, '') + '*/';
             options.content = content;
         }
-        return this.worlds[IsolatedWorld_js_1.MAIN_WORLD].transferHandle(await this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].evaluateHandle(async ({ createDeferredPromise }, { url, content }) => {
+        return this.worlds[IsolatedWorlds_js_1.MAIN_WORLD].transferHandle(await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].evaluateHandle(async ({ createDeferredPromise }, { url, content }) => {
             const promise = createDeferredPromise();
             let element;
             if (!url) {
@@ -36678,7 +36800,7 @@ class Frame {
             document.head.appendChild(element);
             await promise;
             return element;
-        }, await this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].puppeteerUtil, options));
+        }, await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].puppeteerUtil, options));
     }
     /**
      * Clicks the first element found that matches `selector`.
@@ -36699,7 +36821,7 @@ class Frame {
      * @param selector - The selector to query for.
      */
     async click(selector, options = {}) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].click(selector, options);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].click(selector, options);
     }
     /**
      * Focuses the first element that matches the `selector`.
@@ -36708,7 +36830,7 @@ class Frame {
      * @throws Throws if there's no element matching `selector`.
      */
     async focus(selector) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].focus(selector);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].focus(selector);
     }
     /**
      * Hovers the pointer over the center of the first element that matches the
@@ -36718,7 +36840,7 @@ class Frame {
      * @throws Throws if there's no element matching `selector`.
      */
     async hover(selector) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].hover(selector);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].hover(selector);
     }
     /**
      * Selects a set of value on the first `<select>` element that matches the
@@ -36739,7 +36861,7 @@ class Frame {
      * @throws Throws if there's no `<select>` matching `selector`.
      */
     select(selector, ...values) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].select(selector, ...values);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].select(selector, ...values);
     }
     /**
      * Taps the first element that matches the `selector`.
@@ -36748,7 +36870,7 @@ class Frame {
      * @throws Throws if there's no element matching `selector`.
      */
     async tap(selector) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].tap(selector);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].tap(selector);
     }
     /**
      * Sends a `keydown`, `keypress`/`input`, and `keyup` event for each character
@@ -36772,7 +36894,7 @@ class Frame {
      * between key presses in milliseconds. Defaults to `0`.
      */
     async type(selector, text, options) {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].type(selector, text, options);
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].type(selector, text, options);
     }
     /**
      * @deprecated Replace with `new Promise(r => setTimeout(r, milliseconds));`.
@@ -36803,7 +36925,7 @@ class Frame {
      * @returns the frame's title.
      */
     async title() {
-        return this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].title();
+        return this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].title();
     }
     /**
      * @internal
@@ -36846,8 +36968,8 @@ class Frame {
      */
     _detach() {
         __classPrivateFieldSet(this, _Frame_detached, true, "f");
-        this.worlds[IsolatedWorld_js_1.MAIN_WORLD]._detach();
-        this.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD]._detach();
+        this.worlds[IsolatedWorlds_js_1.MAIN_WORLD]._detach();
+        this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD]._detach();
     }
 }
 exports.Frame = Frame;
@@ -36897,7 +37019,7 @@ const EventEmitter_js_1 = __nccwpck_require__(7692);
 const ExecutionContext_js_1 = __nccwpck_require__(8272);
 const Frame_js_1 = __nccwpck_require__(1106);
 const FrameTree_js_1 = __nccwpck_require__(3751);
-const IsolatedWorld_js_1 = __nccwpck_require__(5651);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const NetworkManager_js_1 = __nccwpck_require__(5381);
 const util_js_1 = __nccwpck_require__(8274);
 const UTILITY_WORLD_NAME = '__puppeteer_utility_world__';
@@ -37179,14 +37301,14 @@ _FrameManager_page = new WeakMap(), _FrameManager_networkManager = new WeakMap()
             return;
         }
         if (contextPayload.auxData && !!contextPayload.auxData['isDefault']) {
-            world = frame.worlds[IsolatedWorld_js_1.MAIN_WORLD];
+            world = frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD];
         }
         else if (contextPayload.name === UTILITY_WORLD_NAME &&
-            !frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].hasContext()) {
+            !frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].hasContext()) {
             // In case of multiple sessions to the same target, there's a race between
             // connections so we might end up creating multiple isolated worlds.
             // We can use either.
-            world = frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD];
+            world = frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD];
         }
     }
     const context = new ExecutionContext_js_1.ExecutionContext((frame === null || frame === void 0 ? void 0 : frame._client()) || __classPrivateFieldGet(this, _FrameManager_client, "f"), contextPayload, world);
@@ -38902,7 +39024,7 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
 };
 var _IsolatedWorld_instances, _a, _IsolatedWorld_frame, _IsolatedWorld_document, _IsolatedWorld_context, _IsolatedWorld_detached, _IsolatedWorld_ctxBindings, _IsolatedWorld_boundFunctions, _IsolatedWorld_taskManager, _IsolatedWorld_puppeteerUtil, _IsolatedWorld_bindingIdentifier, _IsolatedWorld_client_get, _IsolatedWorld_frameManager_get, _IsolatedWorld_timeoutSettings_get, _IsolatedWorld_injectPuppeteerUtil, _IsolatedWorld_settingUpBinding, _IsolatedWorld_onBindingCalled;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.IsolatedWorld = exports.PUPPETEER_WORLD = exports.MAIN_WORLD = void 0;
+exports.IsolatedWorld = void 0;
 const injected_js_1 = __nccwpck_require__(8153);
 const assert_js_1 = __nccwpck_require__(7729);
 const DeferredPromise_js_1 = __nccwpck_require__(7015);
@@ -38911,20 +39033,7 @@ const LazyArg_js_1 = __nccwpck_require__(4897);
 const LifecycleWatcher_js_1 = __nccwpck_require__(2169);
 const util_js_1 = __nccwpck_require__(8274);
 const WaitTask_js_1 = __nccwpck_require__(806);
-/**
- * A unique key for {@link IsolatedWorldChart} to denote the default world.
- * Execution contexts are automatically created in the default world.
- *
- * @internal
- */
-exports.MAIN_WORLD = Symbol('mainWorld');
-/**
- * A unique key for {@link IsolatedWorldChart} to denote the puppeteer world.
- * This world contains all puppeteer-internal bindings/code.
- *
- * @internal
- */
-exports.PUPPETEER_WORLD = Symbol('puppeteerWorld');
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 /**
  * @internal
  */
@@ -39286,6 +39395,46 @@ _IsolatedWorld_bindingIdentifier = { value: (name, contextId) => {
         return `${name}_${contextId}`;
     } };
 //# sourceMappingURL=IsolatedWorld.js.map
+
+/***/ }),
+
+/***/ 2296:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PUPPETEER_WORLD = exports.MAIN_WORLD = void 0;
+/**
+ * A unique key for {@link IsolatedWorldChart} to denote the default world.
+ * Execution contexts are automatically created in the default world.
+ *
+ * @internal
+ */
+exports.MAIN_WORLD = Symbol('mainWorld');
+/**
+ * A unique key for {@link IsolatedWorldChart} to denote the puppeteer world.
+ * This world contains all puppeteer-internal bindings/code.
+ *
+ * @internal
+ */
+exports.PUPPETEER_WORLD = Symbol('puppeteerWorld');
+//# sourceMappingURL=IsolatedWorlds.js.map
 
 /***/ }),
 
@@ -40557,7 +40706,7 @@ const EmulationManager_js_1 = __nccwpck_require__(8392);
 const FileChooser_js_1 = __nccwpck_require__(8450);
 const FrameManager_js_1 = __nccwpck_require__(490);
 const Input_js_1 = __nccwpck_require__(7773);
-const IsolatedWorld_js_1 = __nccwpck_require__(5651);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const NetworkManager_js_1 = __nccwpck_require__(5381);
 const PDFOptions_js_1 = __nccwpck_require__(4302);
 const TimeoutSettings_js_1 = __nccwpck_require__(7258);
@@ -42169,7 +42318,7 @@ class CDPPage extends Page_js_1.Page {
      *
      * - `height`: page's height in pixels
      *
-     * - `deviceScalarFactor`: Specify device scale factor (can be though of as
+     * - `deviceScaleFactor`: Specify device scale factor (can be though of as
      *   dpr). Defaults to `1`.
      *
      * - `isMobile`: Whether the meta viewport tag is taken into account. Defaults
@@ -42835,7 +42984,7 @@ _CDPPage_closed = new WeakMap(), _CDPPage_client = new WeakMap(), _CDPPage_targe
     const frame = __classPrivateFieldGet(this, _CDPPage_frameManager, "f").frame(event.frameId);
     (0, assert_js_1.assert)(frame, 'This should never happen.');
     // This is guaranteed to be an HTMLInputElement handle by the event.
-    const handle = (await frame.worlds[IsolatedWorld_js_1.MAIN_WORLD].adoptBackendNode(event.backendNodeId));
+    const handle = (await frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD].adoptBackendNode(event.backendNodeId));
     const fileChooser = new FileChooser_js_1.FileChooser(handle, event);
     for (const promise of __classPrivateFieldGet(this, _CDPPage_fileChooserPromises, "f")) {
         promise.resolve(fileChooser);
@@ -43202,6 +43351,31 @@ exports.networkConditions = exports.PredefinedNetworkConditions;
 
 /***/ }),
 
+/***/ 7023:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2020 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=Product.js.map
+
+/***/ }),
+
 /***/ 8435:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -43292,6 +43466,16 @@ exports.Puppeteer = Puppeteer;
 
 /***/ }),
 
+/***/ 4291:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=PuppeteerViewport.js.map
+
+/***/ }),
+
 /***/ 3200:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -43317,7 +43501,7 @@ exports.getQueryHandlerAndSelector = exports.clearCustomQueryHandlers = exports.
 const AriaQueryHandler_js_1 = __nccwpck_require__(3082);
 const ElementHandle_js_1 = __nccwpck_require__(865);
 const Frame_js_1 = __nccwpck_require__(1106);
-const IsolatedWorld_js_1 = __nccwpck_require__(5651);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 function createPuppeteerQueryHandler(handler) {
     const internalHandler = {};
     if (handler.queryOne) {
@@ -43339,9 +43523,9 @@ function createPuppeteerQueryHandler(handler) {
             }
             else {
                 frame = elementOrFrame.frame;
-                element = await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD].adoptHandle(elementOrFrame);
+                element = await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].adoptHandle(elementOrFrame);
             }
-            const result = await frame.worlds[IsolatedWorld_js_1.PUPPETEER_WORLD]._waitForSelectorInPage(queryOne, element, selector, options);
+            const result = await frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD]._waitForSelectorInPage(queryOne, element, selector, options);
             if (element) {
                 await element.dispose();
             }
@@ -43352,7 +43536,7 @@ function createPuppeteerQueryHandler(handler) {
                 await result.dispose();
                 return null;
             }
-            return frame.worlds[IsolatedWorld_js_1.MAIN_WORLD].transferHandle(result);
+            return frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD].transferHandle(result);
         };
     }
     if (handler.queryAll) {
@@ -43809,6 +43993,31 @@ class Target {
 exports.Target = Target;
 _Target_browserContext = new WeakMap(), _Target_session = new WeakMap(), _Target_targetInfo = new WeakMap(), _Target_sessionFactory = new WeakMap(), _Target_ignoreHTTPSErrors = new WeakMap(), _Target_defaultViewport = new WeakMap(), _Target_pagePromise = new WeakMap(), _Target_workerPromise = new WeakMap(), _Target_screenshotTaskQueue = new WeakMap(), _Target_targetManager = new WeakMap();
 //# sourceMappingURL=Target.js.map
+
+/***/ }),
+
+/***/ 2364:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=TargetManager.js.map
 
 /***/ }),
 
@@ -45193,6 +45402,98 @@ _Page_connection = new WeakMap(), _Page_contextId = new WeakMap();
 
 /***/ }),
 
+/***/ 3031:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__nccwpck_require__(7473), exports);
+__exportStar(__nccwpck_require__(3082), exports);
+__exportStar(__nccwpck_require__(2087), exports);
+__exportStar(__nccwpck_require__(1365), exports);
+__exportStar(__nccwpck_require__(7795), exports);
+__exportStar(__nccwpck_require__(2264), exports);
+__exportStar(__nccwpck_require__(3110), exports);
+__exportStar(__nccwpck_require__(370), exports);
+__exportStar(__nccwpck_require__(1153), exports);
+__exportStar(__nccwpck_require__(1167), exports);
+__exportStar(__nccwpck_require__(9321), exports);
+__exportStar(__nccwpck_require__(4090), exports);
+__exportStar(__nccwpck_require__(1626), exports);
+__exportStar(__nccwpck_require__(7859), exports);
+__exportStar(__nccwpck_require__(865), exports);
+__exportStar(__nccwpck_require__(8392), exports);
+__exportStar(__nccwpck_require__(6315), exports);
+__exportStar(__nccwpck_require__(7692), exports);
+__exportStar(__nccwpck_require__(8272), exports);
+__exportStar(__nccwpck_require__(9831), exports);
+__exportStar(__nccwpck_require__(8450), exports);
+__exportStar(__nccwpck_require__(9806), exports);
+__exportStar(__nccwpck_require__(1106), exports);
+__exportStar(__nccwpck_require__(490), exports);
+__exportStar(__nccwpck_require__(3751), exports);
+__exportStar(__nccwpck_require__(3780), exports);
+__exportStar(__nccwpck_require__(4410), exports);
+__exportStar(__nccwpck_require__(7773), exports);
+__exportStar(__nccwpck_require__(5651), exports);
+__exportStar(__nccwpck_require__(2296), exports);
+__exportStar(__nccwpck_require__(2045), exports);
+__exportStar(__nccwpck_require__(4897), exports);
+__exportStar(__nccwpck_require__(2169), exports);
+__exportStar(__nccwpck_require__(9739), exports);
+__exportStar(__nccwpck_require__(5381), exports);
+__exportStar(__nccwpck_require__(4098), exports);
+__exportStar(__nccwpck_require__(8763), exports);
+__exportStar(__nccwpck_require__(4302), exports);
+__exportStar(__nccwpck_require__(3768), exports);
+__exportStar(__nccwpck_require__(7023), exports);
+__exportStar(__nccwpck_require__(8435), exports);
+__exportStar(__nccwpck_require__(4291), exports);
+__exportStar(__nccwpck_require__(8762), exports);
+__exportStar(__nccwpck_require__(7005), exports);
+__exportStar(__nccwpck_require__(2364), exports);
+__exportStar(__nccwpck_require__(2967), exports);
+__exportStar(__nccwpck_require__(7258), exports);
+__exportStar(__nccwpck_require__(5321), exports);
+__exportStar(__nccwpck_require__(6828), exports);
+__exportStar(__nccwpck_require__(9931), exports);
+__exportStar(__nccwpck_require__(8274), exports);
+__exportStar(__nccwpck_require__(806), exports);
+__exportStar(__nccwpck_require__(4878), exports);
+//# sourceMappingURL=common.js.map
+
+/***/ }),
+
 /***/ 9831:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -45248,6 +45549,31 @@ const getFetch = async () => {
 };
 exports.getFetch = getFetch;
 //# sourceMappingURL=fetch.js.map
+
+/***/ }),
+
+/***/ 6828:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2020 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=types.js.map
 
 /***/ }),
 
@@ -45689,7 +46015,7 @@ exports.source = void 0;
  *
  * @internal
  */
-exports.source = "\"use strict\";\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __export = (target, all) => {\n  for (var name in all)\n    __defProp(target, name, { get: all[name], enumerable: true });\n};\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof from === \"function\") {\n    for (let key of __getOwnPropNames(from))\n      if (!__hasOwnProp.call(to, key) && key !== except)\n        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });\n  }\n  return to;\n};\nvar __toCommonJS = (mod) => __copyProps(__defProp({}, \"__esModule\", { value: true }), mod);\n\n// src/injected/injected.ts\nvar injected_exports = {};\n__export(injected_exports, {\n  default: () => injected_default\n});\nmodule.exports = __toCommonJS(injected_exports);\n\n// src/common/Errors.ts\nvar CustomError = class extends Error {\n  constructor(message) {\n    super(message);\n    this.name = this.constructor.name;\n    Error.captureStackTrace(this, this.constructor);\n  }\n};\nvar TimeoutError = class extends CustomError {\n};\nvar ProtocolError = class extends CustomError {\n  #code;\n  #originalMessage = \"\";\n  set code(code) {\n    this.#code = code;\n  }\n  get code() {\n    return this.#code;\n  }\n  set originalMessage(originalMessage) {\n    this.#originalMessage = originalMessage;\n  }\n  get originalMessage() {\n    return this.#originalMessage;\n  }\n};\nvar errors = Object.freeze({\n  TimeoutError,\n  ProtocolError\n});\n\n// src/util/DeferredPromise.ts\nfunction createDeferredPromise(opts) {\n  let isResolved = false;\n  let isRejected = false;\n  let resolver;\n  let rejector;\n  const taskPromise = new Promise((resolve, reject) => {\n    resolver = resolve;\n    rejector = reject;\n  });\n  const timeoutId = opts && opts.timeout > 0 ? setTimeout(() => {\n    isRejected = true;\n    rejector(new TimeoutError(opts.message));\n  }, opts.timeout) : void 0;\n  return Object.assign(taskPromise, {\n    resolved: () => {\n      return isResolved;\n    },\n    finished: () => {\n      return isResolved || isRejected;\n    },\n    resolve: (value) => {\n      if (timeoutId) {\n        clearTimeout(timeoutId);\n      }\n      isResolved = true;\n      resolver(value);\n    },\n    reject: (err) => {\n      clearTimeout(timeoutId);\n      isRejected = true;\n      rejector(err);\n    }\n  });\n}\n\n// src/util/assert.ts\nvar assert = (value, message) => {\n  if (!value) {\n    throw new Error(message);\n  }\n};\n\n// src/injected/Poller.ts\nvar MutationPoller = class {\n  #fn;\n  #root;\n  #observer;\n  #promise;\n  constructor(fn, root) {\n    this.#fn = fn;\n    this.#root = root;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    this.#observer = new MutationObserver(async () => {\n      const result2 = await this.#fn();\n      if (!result2) {\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    });\n    this.#observer.observe(this.#root, {\n      childList: true,\n      subtree: true,\n      attributes: true\n    });\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n    if (this.#observer) {\n      this.#observer.disconnect();\n      this.#observer = void 0;\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\nvar RAFPoller = class {\n  #fn;\n  #promise;\n  constructor(fn) {\n    this.#fn = fn;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    const poll = async () => {\n      if (promise.finished()) {\n        return;\n      }\n      const result2 = await this.#fn();\n      if (!result2) {\n        window.requestAnimationFrame(poll);\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    };\n    window.requestAnimationFrame(poll);\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\nvar IntervalPoller = class {\n  #fn;\n  #ms;\n  #interval;\n  #promise;\n  constructor(fn, ms) {\n    this.#fn = fn;\n    this.#ms = ms;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    this.#interval = setInterval(async () => {\n      const result2 = await this.#fn();\n      if (!result2) {\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    }, this.#ms);\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n    if (this.#interval) {\n      clearInterval(this.#interval);\n      this.#interval = void 0;\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\n\n// src/injected/TextContent.ts\nvar TRIVIAL_VALUE_INPUT_TYPES = /* @__PURE__ */ new Set([\"checkbox\", \"image\", \"radio\"]);\nvar isNonTrivialValueNode = (node) => {\n  if (node instanceof HTMLSelectElement) {\n    return true;\n  }\n  if (node instanceof HTMLTextAreaElement) {\n    return true;\n  }\n  if (node instanceof HTMLInputElement && !TRIVIAL_VALUE_INPUT_TYPES.has(node.type)) {\n    return true;\n  }\n  return false;\n};\nvar UNSUITABLE_NODE_NAMES = /* @__PURE__ */ new Set([\"SCRIPT\", \"STYLE\"]);\nvar isSuitableNodeForTextMatching = (node) => {\n  return !UNSUITABLE_NODE_NAMES.has(node.nodeName) && !document.head?.contains(node);\n};\nvar textContentCache = /* @__PURE__ */ new WeakMap();\nvar eraseFromCache = (node) => {\n  while (node) {\n    textContentCache.delete(node);\n    if (node instanceof ShadowRoot) {\n      node = node.host;\n    } else {\n      node = node.parentNode;\n    }\n  }\n};\nvar observedNodes = /* @__PURE__ */ new WeakSet();\nvar textChangeObserver = new MutationObserver((mutations) => {\n  for (const mutation of mutations) {\n    eraseFromCache(mutation.target);\n  }\n});\nvar createTextContent = (root) => {\n  let value = textContentCache.get(root);\n  if (value) {\n    return value;\n  }\n  value = { full: \"\", immediate: [] };\n  if (!isSuitableNodeForTextMatching(root)) {\n    return value;\n  }\n  let currentImmediate = \"\";\n  if (isNonTrivialValueNode(root)) {\n    value.full = root.value;\n    value.immediate.push(root.value);\n    root.addEventListener(\n      \"input\",\n      (event) => {\n        eraseFromCache(event.target);\n      },\n      { once: true, capture: true }\n    );\n  } else {\n    for (let child = root.firstChild; child; child = child.nextSibling) {\n      if (child.nodeType === Node.TEXT_NODE) {\n        value.full += child.nodeValue ?? \"\";\n        currentImmediate += child.nodeValue ?? \"\";\n        continue;\n      }\n      if (currentImmediate) {\n        value.immediate.push(currentImmediate);\n      }\n      currentImmediate = \"\";\n      if (child.nodeType === Node.ELEMENT_NODE) {\n        value.full += createTextContent(child).full;\n      }\n    }\n    if (currentImmediate) {\n      value.immediate.push(currentImmediate);\n    }\n    if (root instanceof Element && root.shadowRoot) {\n      value.full += createTextContent(root.shadowRoot).full;\n    }\n    if (!observedNodes.has(root)) {\n      textChangeObserver.observe(root, {\n        childList: true,\n        characterData: true\n      });\n      observedNodes.add(root);\n    }\n  }\n  textContentCache.set(root, value);\n  return value;\n};\n\n// src/injected/TextQuerySelector.ts\nvar TextQuerySelector_exports = {};\n__export(TextQuerySelector_exports, {\n  textQuerySelector: () => textQuerySelector,\n  textQuerySelectorAll: () => textQuerySelectorAll\n});\nvar textQuerySelector = (root, selector) => {\n  for (const node of root.childNodes) {\n    if (node instanceof Element && isSuitableNodeForTextMatching(node)) {\n      let matchedNode;\n      if (node.shadowRoot) {\n        matchedNode = textQuerySelector(node.shadowRoot, selector);\n      } else {\n        matchedNode = textQuerySelector(node, selector);\n      }\n      if (matchedNode) {\n        return matchedNode;\n      }\n    }\n  }\n  if (root instanceof Element) {\n    const textContent = createTextContent(root);\n    if (textContent.full.includes(selector)) {\n      return root;\n    }\n  }\n  return null;\n};\nvar textQuerySelectorAll = (root, selector) => {\n  let results = [];\n  for (const node of root.childNodes) {\n    if (node instanceof Element) {\n      let matchedNodes;\n      if (node.shadowRoot) {\n        matchedNodes = textQuerySelectorAll(node.shadowRoot, selector);\n      } else {\n        matchedNodes = textQuerySelectorAll(node, selector);\n      }\n      results = results.concat(matchedNodes);\n    }\n  }\n  if (results.length > 0) {\n    return results;\n  }\n  if (root instanceof Element) {\n    const textContent = createTextContent(root);\n    if (textContent.full.includes(selector)) {\n      return [root];\n    }\n  }\n  return [];\n};\n\n// src/injected/XPathQuerySelector.ts\nvar XPathQuerySelector_exports = {};\n__export(XPathQuerySelector_exports, {\n  xpathQuerySelector: () => xpathQuerySelector,\n  xpathQuerySelectorAll: () => xpathQuerySelectorAll\n});\nvar xpathQuerySelector = (root, selector) => {\n  const doc = root.ownerDocument || document;\n  const result = doc.evaluate(\n    selector,\n    root,\n    null,\n    XPathResult.FIRST_ORDERED_NODE_TYPE\n  );\n  return result.singleNodeValue;\n};\nvar xpathQuerySelectorAll = (root, selector) => {\n  const doc = root.ownerDocument || document;\n  const iterator = doc.evaluate(\n    selector,\n    root,\n    null,\n    XPathResult.ORDERED_NODE_ITERATOR_TYPE\n  );\n  const array = [];\n  let item;\n  while (item = iterator.iterateNext()) {\n    array.push(item);\n  }\n  return array;\n};\n\n// src/injected/PierceQuerySelector.ts\nvar PierceQuerySelector_exports = {};\n__export(PierceQuerySelector_exports, {\n  pierceQuerySelector: () => pierceQuerySelector,\n  pierceQuerySelectorAll: () => pierceQuerySelectorAll\n});\nvar pierceQuerySelector = (root, selector) => {\n  let found = null;\n  const search = (root2) => {\n    const iter = document.createTreeWalker(root2, NodeFilter.SHOW_ELEMENT);\n    do {\n      const currentNode = iter.currentNode;\n      if (currentNode.shadowRoot) {\n        search(currentNode.shadowRoot);\n      }\n      if (currentNode instanceof ShadowRoot) {\n        continue;\n      }\n      if (currentNode !== root2 && !found && currentNode.matches(selector)) {\n        found = currentNode;\n      }\n    } while (!found && iter.nextNode());\n  };\n  if (root instanceof Document) {\n    root = root.documentElement;\n  }\n  search(root);\n  return found;\n};\nvar pierceQuerySelectorAll = (element, selector) => {\n  const result = [];\n  const collect = (root) => {\n    const iter = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);\n    do {\n      const currentNode = iter.currentNode;\n      if (currentNode.shadowRoot) {\n        collect(currentNode.shadowRoot);\n      }\n      if (currentNode instanceof ShadowRoot) {\n        continue;\n      }\n      if (currentNode !== root && currentNode.matches(selector)) {\n        result.push(currentNode);\n      }\n    } while (iter.nextNode());\n  };\n  if (element instanceof Document) {\n    element = element.documentElement;\n  }\n  collect(element);\n  return result;\n};\n\n// src/injected/util.ts\nvar util_exports = {};\n__export(util_exports, {\n  checkVisibility: () => checkVisibility,\n  createFunction: () => createFunction\n});\nvar createdFunctions = /* @__PURE__ */ new Map();\nvar createFunction = (functionValue) => {\n  let fn = createdFunctions.get(functionValue);\n  if (fn) {\n    return fn;\n  }\n  fn = new Function(`return ${functionValue}`)();\n  createdFunctions.set(functionValue, fn);\n  return fn;\n};\nvar HIDDEN_VISIBILITY_VALUES = [\"hidden\", \"collapse\"];\nvar checkVisibility = (node, visible) => {\n  if (!node) {\n    return visible === false;\n  }\n  if (visible === void 0) {\n    return node;\n  }\n  const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;\n  const style = window.getComputedStyle(element);\n  const isVisible = style && !HIDDEN_VISIBILITY_VALUES.includes(style.visibility) && isBoundingBoxVisible(element);\n  return visible === isVisible ? node : false;\n};\nfunction isBoundingBoxVisible(element) {\n  const rect = element.getBoundingClientRect();\n  return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0;\n}\n\n// src/injected/injected.ts\nvar PuppeteerUtil = Object.freeze({\n  ...util_exports,\n  ...TextQuerySelector_exports,\n  ...XPathQuerySelector_exports,\n  ...PierceQuerySelector_exports,\n  createDeferredPromise,\n  createTextContent,\n  IntervalPoller,\n  isSuitableNodeForTextMatching,\n  MutationPoller,\n  RAFPoller\n});\nvar injected_default = PuppeteerUtil;\n";
+exports.source = "\"use strict\";\nvar __defProp = Object.defineProperty;\nvar __getOwnPropDesc = Object.getOwnPropertyDescriptor;\nvar __getOwnPropNames = Object.getOwnPropertyNames;\nvar __hasOwnProp = Object.prototype.hasOwnProperty;\nvar __export = (target, all) => {\n  for (var name in all)\n    __defProp(target, name, { get: all[name], enumerable: true });\n};\nvar __copyProps = (to, from, except, desc) => {\n  if (from && typeof from === \"object\" || typeof from === \"function\") {\n    for (let key of __getOwnPropNames(from))\n      if (!__hasOwnProp.call(to, key) && key !== except)\n        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });\n  }\n  return to;\n};\nvar __toCommonJS = (mod) => __copyProps(__defProp({}, \"__esModule\", { value: true }), mod);\n\n// src/injected/injected.ts\nvar injected_exports = {};\n__export(injected_exports, {\n  default: () => injected_default\n});\nmodule.exports = __toCommonJS(injected_exports);\n\n// src/common/Errors.ts\nvar CustomError = class extends Error {\n  constructor(message) {\n    super(message);\n    this.name = this.constructor.name;\n    Error.captureStackTrace(this, this.constructor);\n  }\n};\nvar TimeoutError = class extends CustomError {\n};\nvar ProtocolError = class extends CustomError {\n  #code;\n  #originalMessage = \"\";\n  set code(code) {\n    this.#code = code;\n  }\n  get code() {\n    return this.#code;\n  }\n  set originalMessage(originalMessage) {\n    this.#originalMessage = originalMessage;\n  }\n  get originalMessage() {\n    return this.#originalMessage;\n  }\n};\nvar errors = Object.freeze({\n  TimeoutError,\n  ProtocolError\n});\n\n// src/util/DeferredPromise.ts\nfunction createDeferredPromise(opts) {\n  let isResolved = false;\n  let isRejected = false;\n  let resolver;\n  let rejector;\n  const taskPromise = new Promise((resolve, reject) => {\n    resolver = resolve;\n    rejector = reject;\n  });\n  const timeoutId = opts && opts.timeout > 0 ? setTimeout(() => {\n    isRejected = true;\n    rejector(new TimeoutError(opts.message));\n  }, opts.timeout) : void 0;\n  return Object.assign(taskPromise, {\n    resolved: () => {\n      return isResolved;\n    },\n    finished: () => {\n      return isResolved || isRejected;\n    },\n    resolve: (value) => {\n      if (timeoutId) {\n        clearTimeout(timeoutId);\n      }\n      isResolved = true;\n      resolver(value);\n    },\n    reject: (err) => {\n      clearTimeout(timeoutId);\n      isRejected = true;\n      rejector(err);\n    }\n  });\n}\n\n// src/util/assert.ts\nvar assert = (value, message) => {\n  if (!value) {\n    throw new Error(message);\n  }\n};\n\n// src/injected/Poller.ts\nvar MutationPoller = class {\n  #fn;\n  #root;\n  #observer;\n  #promise;\n  constructor(fn, root) {\n    this.#fn = fn;\n    this.#root = root;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    this.#observer = new MutationObserver(async () => {\n      const result2 = await this.#fn();\n      if (!result2) {\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    });\n    this.#observer.observe(this.#root, {\n      childList: true,\n      subtree: true,\n      attributes: true\n    });\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n    if (this.#observer) {\n      this.#observer.disconnect();\n      this.#observer = void 0;\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\nvar RAFPoller = class {\n  #fn;\n  #promise;\n  constructor(fn) {\n    this.#fn = fn;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    const poll = async () => {\n      if (promise.finished()) {\n        return;\n      }\n      const result2 = await this.#fn();\n      if (!result2) {\n        window.requestAnimationFrame(poll);\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    };\n    window.requestAnimationFrame(poll);\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\nvar IntervalPoller = class {\n  #fn;\n  #ms;\n  #interval;\n  #promise;\n  constructor(fn, ms) {\n    this.#fn = fn;\n    this.#ms = ms;\n  }\n  async start() {\n    const promise = this.#promise = createDeferredPromise();\n    const result = await this.#fn();\n    if (result) {\n      promise.resolve(result);\n      return;\n    }\n    this.#interval = setInterval(async () => {\n      const result2 = await this.#fn();\n      if (!result2) {\n        return;\n      }\n      promise.resolve(result2);\n      await this.stop();\n    }, this.#ms);\n  }\n  async stop() {\n    assert(this.#promise, \"Polling never started.\");\n    if (!this.#promise.finished()) {\n      this.#promise.reject(new Error(\"Polling stopped\"));\n    }\n    if (this.#interval) {\n      clearInterval(this.#interval);\n      this.#interval = void 0;\n    }\n  }\n  result() {\n    assert(this.#promise, \"Polling never started.\");\n    return this.#promise;\n  }\n};\n\n// src/injected/TextContent.ts\nvar TRIVIAL_VALUE_INPUT_TYPES = /* @__PURE__ */ new Set([\"checkbox\", \"image\", \"radio\"]);\nvar isNonTrivialValueNode = (node) => {\n  if (node instanceof HTMLSelectElement) {\n    return true;\n  }\n  if (node instanceof HTMLTextAreaElement) {\n    return true;\n  }\n  if (node instanceof HTMLInputElement && !TRIVIAL_VALUE_INPUT_TYPES.has(node.type)) {\n    return true;\n  }\n  return false;\n};\nvar UNSUITABLE_NODE_NAMES = /* @__PURE__ */ new Set([\"SCRIPT\", \"STYLE\"]);\nvar isSuitableNodeForTextMatching = (node) => {\n  return !UNSUITABLE_NODE_NAMES.has(node.nodeName) && !document.head?.contains(node);\n};\nvar textContentCache = /* @__PURE__ */ new WeakMap();\nvar eraseFromCache = (node) => {\n  while (node) {\n    textContentCache.delete(node);\n    if (node instanceof ShadowRoot) {\n      node = node.host;\n    } else {\n      node = node.parentNode;\n    }\n  }\n};\nvar observedNodes = /* @__PURE__ */ new WeakSet();\nvar textChangeObserver = new MutationObserver((mutations) => {\n  for (const mutation of mutations) {\n    eraseFromCache(mutation.target);\n  }\n});\nvar createTextContent = (root) => {\n  let value = textContentCache.get(root);\n  if (value) {\n    return value;\n  }\n  value = { full: \"\", immediate: [] };\n  if (!isSuitableNodeForTextMatching(root)) {\n    return value;\n  }\n  let currentImmediate = \"\";\n  if (isNonTrivialValueNode(root)) {\n    value.full = root.value;\n    value.immediate.push(root.value);\n    root.addEventListener(\n      \"input\",\n      (event) => {\n        eraseFromCache(event.target);\n      },\n      { once: true, capture: true }\n    );\n  } else {\n    for (let child = root.firstChild; child; child = child.nextSibling) {\n      if (child.nodeType === Node.TEXT_NODE) {\n        value.full += child.nodeValue ?? \"\";\n        currentImmediate += child.nodeValue ?? \"\";\n        continue;\n      }\n      if (currentImmediate) {\n        value.immediate.push(currentImmediate);\n      }\n      currentImmediate = \"\";\n      if (child.nodeType === Node.ELEMENT_NODE) {\n        value.full += createTextContent(child).full;\n      }\n    }\n    if (currentImmediate) {\n      value.immediate.push(currentImmediate);\n    }\n    if (root instanceof Element && root.shadowRoot) {\n      value.full += createTextContent(root.shadowRoot).full;\n    }\n    if (!observedNodes.has(root)) {\n      textChangeObserver.observe(root, {\n        childList: true,\n        characterData: true\n      });\n      observedNodes.add(root);\n    }\n  }\n  textContentCache.set(root, value);\n  return value;\n};\n\n// src/injected/TextQuerySelector.ts\nvar TextQuerySelector_exports = {};\n__export(TextQuerySelector_exports, {\n  textQuerySelector: () => textQuerySelector,\n  textQuerySelectorAll: () => textQuerySelectorAll\n});\nvar textQuerySelector = (root, selector) => {\n  for (const node of root.childNodes) {\n    if (node instanceof Element && isSuitableNodeForTextMatching(node)) {\n      let matchedNode;\n      if (node.shadowRoot) {\n        matchedNode = textQuerySelector(node.shadowRoot, selector);\n      } else {\n        matchedNode = textQuerySelector(node, selector);\n      }\n      if (matchedNode) {\n        return matchedNode;\n      }\n    }\n  }\n  if (root instanceof Element) {\n    const textContent = createTextContent(root);\n    if (textContent.full.includes(selector)) {\n      return root;\n    }\n  }\n  return null;\n};\nvar textQuerySelectorAll = (root, selector) => {\n  let results = [];\n  for (const node of root.childNodes) {\n    if (node instanceof Element) {\n      let matchedNodes;\n      if (node.shadowRoot) {\n        matchedNodes = textQuerySelectorAll(node.shadowRoot, selector);\n      } else {\n        matchedNodes = textQuerySelectorAll(node, selector);\n      }\n      results = results.concat(matchedNodes);\n    }\n  }\n  if (results.length > 0) {\n    return results;\n  }\n  if (root instanceof Element) {\n    const textContent = createTextContent(root);\n    if (textContent.full.includes(selector)) {\n      return [root];\n    }\n  }\n  return [];\n};\n\n// src/injected/XPathQuerySelector.ts\nvar XPathQuerySelector_exports = {};\n__export(XPathQuerySelector_exports, {\n  xpathQuerySelector: () => xpathQuerySelector,\n  xpathQuerySelectorAll: () => xpathQuerySelectorAll\n});\nvar xpathQuerySelector = (root, selector) => {\n  const doc = root.ownerDocument || document;\n  const result = doc.evaluate(\n    selector,\n    root,\n    null,\n    XPathResult.FIRST_ORDERED_NODE_TYPE\n  );\n  return result.singleNodeValue;\n};\nvar xpathQuerySelectorAll = (root, selector) => {\n  const doc = root.ownerDocument || document;\n  const iterator = doc.evaluate(\n    selector,\n    root,\n    null,\n    XPathResult.ORDERED_NODE_ITERATOR_TYPE\n  );\n  const array = [];\n  let item;\n  while (item = iterator.iterateNext()) {\n    array.push(item);\n  }\n  return array;\n};\n\n// src/injected/PierceQuerySelector.ts\nvar PierceQuerySelector_exports = {};\n__export(PierceQuerySelector_exports, {\n  pierceQuerySelector: () => pierceQuerySelector,\n  pierceQuerySelectorAll: () => pierceQuerySelectorAll\n});\nvar pierceQuerySelector = (root, selector) => {\n  let found = null;\n  const search = (root2) => {\n    const iter = document.createTreeWalker(root2, NodeFilter.SHOW_ELEMENT);\n    do {\n      const currentNode = iter.currentNode;\n      if (currentNode.shadowRoot) {\n        search(currentNode.shadowRoot);\n      }\n      if (currentNode instanceof ShadowRoot) {\n        continue;\n      }\n      if (currentNode !== root2 && !found && currentNode.matches(selector)) {\n        found = currentNode;\n      }\n    } while (!found && iter.nextNode());\n  };\n  if (root instanceof Document) {\n    root = root.documentElement;\n  }\n  search(root);\n  return found;\n};\nvar pierceQuerySelectorAll = (element, selector) => {\n  const result = [];\n  const collect = (root) => {\n    const iter = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);\n    do {\n      const currentNode = iter.currentNode;\n      if (currentNode.shadowRoot) {\n        collect(currentNode.shadowRoot);\n      }\n      if (currentNode instanceof ShadowRoot) {\n        continue;\n      }\n      if (currentNode !== root && currentNode.matches(selector)) {\n        result.push(currentNode);\n      }\n    } while (iter.nextNode());\n  };\n  if (element instanceof Document) {\n    element = element.documentElement;\n  }\n  collect(element);\n  return result;\n};\n\n// src/injected/util.ts\nvar util_exports = {};\n__export(util_exports, {\n  checkVisibility: () => checkVisibility,\n  createFunction: () => createFunction\n});\nvar createdFunctions = /* @__PURE__ */ new Map();\nvar createFunction = (functionValue) => {\n  let fn = createdFunctions.get(functionValue);\n  if (fn) {\n    return fn;\n  }\n  fn = new Function(`return ${functionValue}`)();\n  createdFunctions.set(functionValue, fn);\n  return fn;\n};\nvar HIDDEN_VISIBILITY_VALUES = [\"hidden\", \"collapse\"];\nvar checkVisibility = (node, visible) => {\n  if (!node) {\n    return visible === false;\n  }\n  if (visible === void 0) {\n    return node;\n  }\n  const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;\n  const style = window.getComputedStyle(element);\n  const isVisible = style && !HIDDEN_VISIBILITY_VALUES.includes(style.visibility) && !isBoundingBoxEmpty(element);\n  return visible === isVisible ? node : false;\n};\nfunction isBoundingBoxEmpty(element) {\n  const rect = element.getBoundingClientRect();\n  return rect.width === 0 || rect.height === 0;\n}\n\n// src/injected/injected.ts\nvar PuppeteerUtil = Object.freeze({\n  ...util_exports,\n  ...TextQuerySelector_exports,\n  ...XPathQuerySelector_exports,\n  ...PierceQuerySelector_exports,\n  createDeferredPromise,\n  createTextContent,\n  IntervalPoller,\n  isSuitableNodeForTextMatching,\n  MutationPoller,\n  RAFPoller\n});\nvar injected_default = PuppeteerUtil;\n";
 //# sourceMappingURL=injected.js.map
 
 /***/ }),
@@ -45704,7 +46030,7 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '19.2.2';
+exports.packageVersion = '19.3.0';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
@@ -46750,38 +47076,38 @@ class ChromeLauncher extends ProductLauncher_js_1.ProductLauncher {
         return browser;
     }
     defaultArgs(options = {}) {
+        // See https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md
         const chromeArguments = [
             '--allow-pre-commit-input',
             '--disable-background-networking',
-            '--enable-features=NetworkServiceInProcess2',
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
             '--disable-breakpad',
             '--disable-client-side-phishing-detection',
             '--disable-component-extensions-with-background-pages',
+            '--disable-component-update',
             '--disable-default-apps',
             '--disable-dev-shm-usage',
             '--disable-extensions',
-            // TODO: remove AvoidUnnecessaryBeforeUnloadCheckSync below
-            // once crbug.com/1324138 is fixed and released.
             // AcceptCHFrame disabled because of crbug.com/1348106.
-            '--disable-features=Translate,BackForwardCache,AcceptCHFrame,AvoidUnnecessaryBeforeUnloadCheckSync',
+            '--disable-features=Translate,BackForwardCache,AcceptCHFrame,MediaRouter,OptimizationHints',
             '--disable-hang-monitor',
             '--disable-ipc-flooding-protection',
             '--disable-popup-blocking',
             '--disable-prompt-on-repost',
             '--disable-renderer-backgrounding',
             '--disable-sync',
+            '--enable-automation',
+            // TODO(sadym): remove '--enable-blink-features=IdleDetection' once
+            // IdleDetection is turned on by default.
+            '--enable-blink-features=IdleDetection',
+            '--enable-features=NetworkServiceInProcess2',
+            '--export-tagged-pdf',
             '--force-color-profile=srgb',
             '--metrics-recording-only',
             '--no-first-run',
-            '--enable-automation',
             '--password-store=basic',
             '--use-mock-keychain',
-            // TODO(sadym): remove '--enable-blink-features=IdleDetection'
-            // once IdleDetection is turned on by default.
-            '--enable-blink-features=IdleDetection',
-            '--export-tagged-pdf',
         ];
         const { devtools = false, headless = !devtools, args = [], userDataDir, } = options;
         if (userDataDir) {
@@ -47256,6 +47582,31 @@ exports.FirefoxLauncher = FirefoxLauncher;
 
 /***/ }),
 
+/***/ 5608:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2020 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+//# sourceMappingURL=LaunchOptions.js.map
+
+/***/ }),
+
 /***/ 9238:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -47709,11 +48060,12 @@ class PuppeteerNode extends Puppeteer_js_1.Puppeteer {
         return __classPrivateFieldGet(this, _PuppeteerNode_instances, "a", _PuppeteerNode_launcher_get).defaultArgs(options);
     }
     /**
-     * @deprecated If you are using `puppeteer-core`, do not use this method. Just
-     * construct {@link BrowserFetcher} manually.
-     *
      * @param options - Set of configurable options to specify the settings of the
      * BrowserFetcher.
+     *
+     * @remarks
+     * If you are using `puppeteer-core`, do not use this method. Just
+     * construct {@link BrowserFetcher} manually.
      *
      * @returns A new BrowserFetcher instance.
      */
@@ -47756,6 +48108,111 @@ _PuppeteerNode__launcher = new WeakMap(), _PuppeteerNode_lastLaunchedProduct = n
     return __classPrivateFieldGet(this, _PuppeteerNode__launcher, "f");
 };
 //# sourceMappingURL=PuppeteerNode.js.map
+
+/***/ }),
+
+/***/ 1068:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__nccwpck_require__(6573), exports);
+__exportStar(__nccwpck_require__(7988), exports);
+__exportStar(__nccwpck_require__(5524), exports);
+__exportStar(__nccwpck_require__(9585), exports);
+__exportStar(__nccwpck_require__(5608), exports);
+__exportStar(__nccwpck_require__(9238), exports);
+__exportStar(__nccwpck_require__(9675), exports);
+__exportStar(__nccwpck_require__(4140), exports);
+//# sourceMappingURL=node.js.map
+
+/***/ }),
+
+/***/ 4807:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2017 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.launch = exports.executablePath = exports.defaultArgs = exports.createBrowserFetcher = exports.connect = void 0;
+__exportStar(__nccwpck_require__(1742), exports);
+__exportStar(__nccwpck_require__(3031), exports);
+__exportStar(__nccwpck_require__(1068), exports);
+__exportStar(__nccwpck_require__(2580), exports);
+__exportStar(__nccwpck_require__(1470), exports);
+/**
+ * @deprecated Use the query handler API defined on {@link Puppeteer}
+ */
+__exportStar(__nccwpck_require__(3200), exports);
+const PuppeteerNode_js_1 = __nccwpck_require__(4140);
+/**
+ * @public
+ */
+const puppeteer = new PuppeteerNode_js_1.PuppeteerNode({
+    isPuppeteerCore: true,
+});
+exports.connect = puppeteer.connect, exports.createBrowserFetcher = puppeteer.createBrowserFetcher, exports.defaultArgs = puppeteer.defaultArgs, exports.executablePath = puppeteer.executablePath, exports.launch = puppeteer.launch;
+exports["default"] = puppeteer;
+//# sourceMappingURL=puppeteer-core.js.map
 
 /***/ }),
 
@@ -47947,6 +48404,49 @@ exports.assert = assert;
 
 /***/ }),
 
+/***/ 1470:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__nccwpck_require__(7729), exports);
+__exportStar(__nccwpck_require__(7454), exports);
+__exportStar(__nccwpck_require__(7015), exports);
+__exportStar(__nccwpck_require__(2937), exports);
+//# sourceMappingURL=util.js.map
+
+/***/ }),
+
 /***/ 3733:
 /***/ ((module) => {
 
@@ -48054,15 +48554,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.launch = exports.executablePath = exports.defaultArgs = exports.createBrowserFetcher = exports.connect = void 0;
-__exportStar(__nccwpck_require__(1626), exports);
-__exportStar(__nccwpck_require__(6315), exports);
-__exportStar(__nccwpck_require__(3768), exports);
-__exportStar(__nccwpck_require__(8435), exports);
-/**
- * @deprecated Use the query handler API defined on {@link Puppeteer}
- */
-__exportStar(__nccwpck_require__(3200), exports);
-__exportStar(__nccwpck_require__(6573), exports);
+__exportStar(__nccwpck_require__(4807), exports);
 const PuppeteerNode_js_1 = __nccwpck_require__(4140);
 const getConfiguration_js_1 = __nccwpck_require__(3191);
 const configuration = (0, getConfiguration_js_1.getConfiguration)();
@@ -54778,14 +55270,14 @@ const {puppetRun} = __nccwpck_require__(9367);
 async function run() {
     try {
         const parameters = await tools.getParameters();
-        core.info(`Parameters: ${JSON.stringify(parameters)}`);
+        core.debug(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
-        core.info(`Parameters valid: ${parametersValid}`);
+        core.debug(`Parameters valid: ${parametersValid}`);
 
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
 
-        core.info('Webpage Screenshot Action finished successfully.');
+        core.info('Webpage Screenshot Action finished.');
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);

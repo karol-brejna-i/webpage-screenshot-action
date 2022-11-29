@@ -1,5 +1,7 @@
 const core = require('@actions/core');
 const puppeteer = require('puppeteer');
+const os = require("os");
+const path = require("path");
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -15,6 +17,31 @@ const catchConsole = async function (page) {
     });
 };
 
+
+const getBrowserPath = async function () {
+    const type = os.type();
+
+    let browserPath = undefined;
+    switch (type) {
+        case 'Windows_NT': {
+            const programFiles = process.env.PROGRAMFILES;
+            browserPath = path.join(programFiles, 'Google/Chrome/Application/chrome.exe');
+            break;
+        }
+        case 'Darwin': {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+            break;
+        }
+        case 'Linux':
+        default: {
+            browserPath = '/usr/bin/google-chrome';
+            break;
+        }
+    }
+    core.debug('Browser path: ' + browserPath);
+    return browserPath;
+}
+
 const puppetRun = async function (parameters) {
     core.info('Puppet run.');
 
@@ -23,16 +50,19 @@ const puppetRun = async function (parameters) {
 
     // TODO make it right
     const launchOptions = {
-        executablePath: 'google-chrome-stable',
+        executablePath: await getBrowserPath(),
         args: ['--no-sandbox'],
         headless: true
     }
 
+
+    // start the headless browser
+    const browser = await puppeteer.launch(launchOptions);
+
+    // TODO: "Promise me, it will look more like an async javascript" -- Promise
     // make promises for all required shots
     const promises = urls.map(
         async (url) => {
-            // start the headless browser
-            const browser = await puppeteer.launch(launchOptions);
             const page = await browser.newPage();
             // capture browser console, if required
             await catchConsole(page);
@@ -45,6 +75,7 @@ const puppetRun = async function (parameters) {
                 response = await page.goto(url);
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
+                core.setFailed(error.message)
                 result = {"error": error.message};
             }
 
@@ -64,17 +95,16 @@ const puppetRun = async function (parameters) {
                 await page.screenshot({path: parameters.output, fullPage: false});
             }
 
-            await browser.close();
-
             return result;
         });
-
 
     const results = await Promise.all(promises);
 
     const resultObject = results.map((result, index) => {
         return {url: urls[index], result: result};
     });
+
+    await browser.close();
 
     core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
     return resultObject;

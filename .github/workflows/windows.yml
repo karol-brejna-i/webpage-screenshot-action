@@ -1,0 +1,38 @@
+name: "Basic workflow for Windows"
+run-name: ${{ github.actor }} test 🚀
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL to check'
+        required: true
+        default: 'https://google.com'
+      scriptBefore:
+        description: 'Script to run before the check'
+        required: false
+        type: multiline
+        default: 'console.log("Hello world!"); result="OK";'
+
+jobs:
+  maceWindu:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - env:
+          URL: ${{ github.event.inputs.url }}
+          SCRIPT_BEFORE: ${{ github.event.inputs.scriptBefore }}
+        run: |
+          echo "URL: $URL"
+          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
+      - run: |
+          pwd
+          ls
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        id: screenshot
+        with:
+          url: ${{ github.event.inputs.url }}
+          scriptBefore: ${{ github.event.inputs.scriptBefore }}
+      - run: |
+          ls

@@ -56,6 +56,15 @@ XPath selector of an HTML page element, i.e. `//*[@id="www-wikipedia-org"]/div[1
 Only used if _mode_ is `element` or `scrollToElement`.
 
 ## Examples
+Let's consider the following use cases for the action:
+- taking a screenshot of a web page
+  - [whole page](#whole-page) screenshot
+  - Selected [element](#element) screenshot
+- [Running a script](#running-a-script) before taking a screenshot
+  - Returning a [value](#returning-a-value) from the script
+  - Counting the number of elements on a page
+  - Checking if given text is present in the page
+  - Manipulating DOM (insert element before first \<h1\>)
 
 
 ## License
@@ -69,5 +78,5 @@ The following features are not implemented yet, but may be added in the future:
 1. Simulate a device (i.e.mobile phone; see https://pptr.dev/api/puppeteer.knowndevices/)
 2. Allow for multiple screenshots (i.e. for different devices)
 3. Allow for multiple URLs (i.e. for different pages)
-4. Capture the browser console output (if required)
+4. Capture the browser console output (if required) - mechanics in place, but not exposed as an input
 5. Specify screenshot type (puppeteer supports either jpeg or png)
