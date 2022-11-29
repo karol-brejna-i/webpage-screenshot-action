@@ -1,6 +1,7 @@
 const core = require('@actions/core');
 const puppeteer = require('puppeteer');
 const os = require("os");
+const path = require("path");
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -43,6 +44,7 @@ const getBrowserPath = async function () {
             break;
         }
     }
+    core.debug('Browser path: ' + browserPath);
     return browserPath;
 }
 

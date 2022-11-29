@@ -28138,6 +28138,7 @@ function defaultCallback(err) {
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(7174);
 const os = __nccwpck_require__(2037);
+const path = __nccwpck_require__(1017);
 
 const catchConsole = async function (page) {
     page.on("pageerror", function (err) {
@@ -28180,6 +28181,7 @@ const getBrowserPath = async function () {
             break;
         }
     }
+    core.debug('Browser path: ' + browserPath);
     return browserPath;
 }
 
