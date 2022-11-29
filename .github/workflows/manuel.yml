@@ -140,30 +140,6 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: openLocalFile
         with:
-          url: file://${PWD}/examples/simple.html
+          url: file://${{github.workspace}}/examples/simple.html
       - run: |
           ls
-
-  maceWindu:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - env:
-          URL: ${{ github.event.inputs.url }}
-          SCRIPT_BEFORE: ${{ github.event.inputs.scriptBefore }}
-        run: |
-          echo "URL: $URL"
-          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-      - run: |
-          ls
-          pwd
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        id: screenshot
-        with:
-          url: ${{ github.event.inputs.url }}
-          scriptBefore: ${{ github.event.inputs.scriptBefore }}
-      - run: |
-          ls
-          pwd
