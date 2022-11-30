@@ -28188,7 +28188,7 @@ const puppetRun = async function (parameters) {
     // TODO make it right
     const launchOptions = {
         executablePath: await getBrowserPath(),
-        args: ['--no-sandbox'],
+        // args: ['--no-sandbox'],
         headless: true
     }
 
@@ -28229,7 +28229,9 @@ const puppetRun = async function (parameters) {
                     }
                     core.info(`Result: ${result}`);
                 }
-                await page.screenshot({path: parameters.output, fullPage: false});
+                const fullPageRequired = parameters.mode === "wholePage";
+                core.debug('fullPageRequired ' + fullPageRequired);
+                await page.screenshot({path: parameters.output, fullPage: fullPageRequired});
             }
 
             return result;
