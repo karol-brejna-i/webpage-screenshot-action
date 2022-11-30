@@ -85,7 +85,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          ls  -la /usr/bin/
           which google-chrome
           which chromium
           google-chrome --version
