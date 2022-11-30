@@ -28201,6 +28201,12 @@ const puppetRun = async function (parameters) {
     const promises = urls.map(
         async (url) => {
             const page = await browser.newPage();
+
+            // XXX TODO: DEBUG code:
+            const version = await page.browser().version();
+            core.info('Browser version: ' + version);
+
+
             // capture browser console, if required
             await catchConsole(page);
 
@@ -28260,7 +28266,7 @@ module.exports = {catchConsole, puppetRun};
 const core = __nccwpck_require__(2186);
 
 let runMyScript = async function (page, theScript) {
-    core.info('runMyScript');
+    core.info('Running a script');
     core.debug(theScript);
     const bodyHandle = await page.$('body');
 

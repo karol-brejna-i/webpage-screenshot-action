@@ -64,6 +64,12 @@ const puppetRun = async function (parameters) {
     const promises = urls.map(
         async (url) => {
             const page = await browser.newPage();
+
+            // XXX TODO: DEBUG code:
+            const version = await page.browser().version();
+            core.info('Browser version: ' + version);
+
+
             // capture browser console, if required
             await catchConsole(page);
 
