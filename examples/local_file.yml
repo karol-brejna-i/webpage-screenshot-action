@@ -12,8 +12,5 @@ jobs:
       - uses: actions/checkout@v3
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
-          url: https://google.com
-      - uses: actions/upload-artifact@v3
-        with:
-          name: simple-screenshot
-          path: ${{ github.workspace }}/*.png
+          url: file://${{github.workspace}}/examples/simple.html
+
