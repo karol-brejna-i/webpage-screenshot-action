@@ -14,20 +14,6 @@ on:
         default: 'console.log("Hello world!");'
 
 jobs:
-  screenshot_local:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - run: npm install
-      - name: Run the action
-        uses: ./
-        id: screenshot
-        with:
-          url: ${{ github.event.inputs.url }}
-          scriptBefore: ${{ github.event.inputs.scriptBefore }}
-      - run: |
-          ls
-
   screenshot_external:
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +81,7 @@ jobs:
           name: screenshots
           path: ${{ github.workspace }}/*.png
 
-  screenshot_google:
+  screenshot_readme:
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
