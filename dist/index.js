@@ -28171,7 +28171,8 @@ const getBrowserPath = async function () {
         }
         case 'Linux':
         default: {
-            browserPath = '/usr/bin/google-chrome';
+            // browserPath = '/usr/bin/google-chrome';
+            browserPath = '/usr/bin/google-chromium';
             break;
         }
     }
@@ -28187,7 +28188,7 @@ const puppetRun = async function (parameters) {
 
     // TODO make it right
     const launchOptions = {
-        // executablePath: await getBrowserPath(),
+        executablePath: await getBrowserPath(),
         // args: ['--no-sandbox'],
         headless: true
     }

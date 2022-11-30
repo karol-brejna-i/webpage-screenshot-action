@@ -85,7 +85,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          ls /usr/bin/
+          ls  -la /usr/bin/
+          which google-chrome
+          which chromium
+          google-chrome --version
+          chromium-browser --version
+
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
