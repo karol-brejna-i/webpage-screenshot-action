@@ -84,6 +84,8 @@ jobs:
   screenshot_readme:
     runs-on: ubuntu-latest
     steps:
+      - run: |
+          ls /usr/bin/
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md

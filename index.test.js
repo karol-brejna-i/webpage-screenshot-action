@@ -7,7 +7,6 @@ const cleanEnvs = function () {
     delete process.env['INPUT_MODE'];
     delete process.env['INPUT_OUTPUT'];
     delete process.env['INPUT_SCRIPTBEFORE'];
-
 }
 
 test('default mode', async () => {
