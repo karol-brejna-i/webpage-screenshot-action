@@ -58,8 +58,8 @@ test('test parameter for element', () => {
 
 test('test given output name', async () => {
     console.log('test given output name');
-    process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_OUTPUT'] = 'google-screenshot.png';
+    process.env['INPUT_URL'] = 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md';
+    process.env['INPUT_OUTPUT'] = 'readme-screenshot.png';
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
