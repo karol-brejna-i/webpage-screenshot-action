@@ -14,7 +14,7 @@ test('default mode', async () => {
 
 test('non-default mode', async () => {
     console.log('non-default mode');
-    process.env['INPUT_MODE'] = 'element';
+    process.env['INPUT_MODE'] = 'page';
     const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).not.toBe('wholePage');
@@ -60,17 +60,18 @@ test('test given output name', async () => {
     console.log('test given output name');
     process.env['INPUT_URL'] = 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md';
     process.env['INPUT_OUTPUT'] = 'readme-screenshot.png';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
-    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
+    await expect(result).toEqual(expect.stringContaining('{"url":"https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md"}'));
 });
 
 test('test run without scriptBefore', async () => {
     console.log('test run without scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
@@ -81,8 +82,8 @@ test('test run without scriptBefore', async () => {
 test('test run with scriptBefore', async () => {
     console.log('test run with scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
@@ -93,8 +94,8 @@ test('test run with scriptBefore', async () => {
 test('test run with faulty scriptBefore', async () => {
     console.log('test run with faulty scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'return 42;';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     try {
@@ -114,6 +115,7 @@ test('test run with faulty url', async () => {
 
     // the URL is technically valid, but it's not reachable
     process.env['INPUT_URL'] = 'https://ąśćżź.pl';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     const options = {

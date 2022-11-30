@@ -28288,12 +28288,8 @@ module.exports = runMyScript;
 const core = __nccwpck_require__(2186);
 
 module.exports = {
-    getMode: async function () {
-        return new Promise(
-            (resolve => {
-                const result = core.getInput('mode') || 'wholePage';
-                resolve(result);
-            }));
+    getMode: function () {
+        return core.getInput('mode') || 'wholePage';
     },
 
     getParameters: async function () {
@@ -28315,9 +28311,7 @@ module.exports = {
                 });
             }));
     },
-    checkUrl: function(url) {
-        console.log('checkUrl: ' + url);
-
+    checkUrl: function (url) {
         try {
             const result = new URL(url)
             return Boolean(result);
@@ -28335,6 +28329,10 @@ module.exports = {
 
                 if (!parametersJson.url) {
                     throw Error('Please provide a URL.');
+                }
+
+                if (!parametersJson.mode) {
+                    throw Error('Please provide mode.');
                 }
 
                 if (!this.checkUrl(parametersJson.url)) {
@@ -55273,7 +55271,6 @@ async function run() {
         core.debug(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
         core.debug(`Parameters valid: ${parametersValid}`);
-
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
 
