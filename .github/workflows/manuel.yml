@@ -102,6 +102,7 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://google.com
+          output: google-screenshot.png
       - uses: actions/upload-artifact@v3
         with:
           name: google-screenshot

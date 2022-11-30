@@ -42,7 +42,7 @@ test('Fail without URL', async () => {
 });
 
 test('test parameter for element', () => {
-    console.log("test parameter for element");
+    console.log('test parameter for element');
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
@@ -56,8 +56,19 @@ test('test parameter for element', () => {
     }
 });
 
+test('test given output name', async () => {
+    console.log('test given output name');
+    process.env['INPUT_URL'] = 'https://google.com';
+    process.env['INPUT_OUTPUT'] = 'google-screenshot.png';
+    const ip = path.join(__dirname, 'index.js');
+
+    const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+    console.log(result);
+    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
+});
+
 test('test run without scriptBefore', async () => {
-    console.log("test run without scriptBefore");
+    console.log('test run without scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
@@ -68,7 +79,7 @@ test('test run without scriptBefore', async () => {
 });
 
 test('test run with scriptBefore', async () => {
-    console.log("-test run with scriptBefore");
+    console.log('test run with scriptBefore');
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
