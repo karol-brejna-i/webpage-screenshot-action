@@ -14,50 +14,50 @@ on:
         default: 'console.log("Hello world!");'
 
 jobs:
-  screenshot_external:
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          URL: ${{ github.event.inputs.url }}
-          SCRIPT_BEFORE:
-            ${{ github.event.inputs.scriptBefore }}
-        run: |
-          echo "URL: $URL"
-          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        id: screenshot
-        with:
-          url: ${{ github.event.inputs.url }}
-          scriptBefore: ${{ github.event.inputs.scriptBefore }}
-      - run: |
-          ls
-
-  multiline:
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          URL: ${{ github.event.inputs.url }}
-          SCRIPT_BEFORE:
-            ${{ github.event.inputs.scriptBefore }}
-        run: |
-          echo "URL: $URL"
-          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        id: screenshot
-        with:
-          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-          scriptBefore: |
-            const headerElement = document.createElement("h1");
-            headerElement.innerHTML = "!+!-+!-+!-+!-!";
-            const xpathExpression = '//h1';
-            const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-            firstChild.parentNode.insertBefore(headerElement, firstChild);
-            
-            result = "I made it!";
-      - run: |
-          ls
+#  screenshot_external:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - env:
+#          URL: ${{ github.event.inputs.url }}
+#          SCRIPT_BEFORE:
+#            ${{ github.event.inputs.scriptBefore }}
+#        run: |
+#          echo "URL: $URL"
+#          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
+#
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        id: screenshot
+#        with:
+#          url: ${{ github.event.inputs.url }}
+#          scriptBefore: ${{ github.event.inputs.scriptBefore }}
+#      - run: |
+#          ls
+#
+#  multiline:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - env:
+#          URL: ${{ github.event.inputs.url }}
+#          SCRIPT_BEFORE:
+#            ${{ github.event.inputs.scriptBefore }}
+#        run: |
+#          echo "URL: $URL"
+#          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
+#
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        id: screenshot
+#        with:
+#          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+#          scriptBefore: |
+#            const headerElement = document.createElement("h1");
+#            headerElement.innerHTML = "!+!-+!-+!-+!-!";
+#            const xpathExpression = '//h1';
+#            const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+#            firstChild.parentNode.insertBefore(headerElement, firstChild);
+#
+#            result = "I made it!";
+#      - run: |
+#          ls
 
   local_file:
     name: Use local file (html file in the local filesystem)
@@ -105,7 +105,7 @@ jobs:
       - name: Take photo of github.com
         uses: "lannonbr/puppeteer-screenshot-action@1.3.1"
         with:
-          url: https://github.com
+          url: ${{ github.event.inputs.url }}
           fullPage: true
       - run: |
           ls screenshots/
