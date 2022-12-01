@@ -102,7 +102,7 @@ const puppetRun = async function (parameters) {
                 const fullPageRequired = parameters.mode === "wholePage";
                 const fullPage = parameters.mode === "wholePage";
                 core.debug('fullPageRequired ' + fullPageRequired);
-                core.debug('fullPage: ' + fullPage);
+                core.info("fullPage: " + fullPage);
                 await page.screenshot({path: parameters.output, fullPage});
             }
 
