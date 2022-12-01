@@ -28216,10 +28216,8 @@ const puppetRun = async function (parameters) {
 
             let response;
             try {
-                response = await page.goto(url, {
-                        waitUntil: "networkidle2",
-                    });
-                await page.waitFor(3000);
+                response = await page.goto(url, {waitUntil: "networkidle2"});
+                // await page.waitFor(3000);    
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
                 core.setFailed(error.message)
