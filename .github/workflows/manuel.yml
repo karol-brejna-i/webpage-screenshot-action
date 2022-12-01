@@ -108,4 +108,8 @@ jobs:
           url: https://github.com
           fullPage: true
       - run: |
-          ls
+          ls screenshots/
+      - uses: actions/upload-artifact@v3
+        with:
+          name: screenshots
+          path: ${{ github.workspace }}/screenshots/*.png
