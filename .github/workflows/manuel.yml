@@ -98,3 +98,13 @@ jobs:
         with:
           name: screenshots
           path: ${{ github.workspace }}/*.png
+
+  obcak:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take photo of github.com
+        uses: "lannonbr/puppeteer-screenshot-action@1.0.0"
+        with:
+          url: https://github.com
+      - run: |
+          ls

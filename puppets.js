@@ -34,8 +34,8 @@ const getBrowserPath = async function () {
         }
         case 'Linux':
         default: {
-            // browserPath = '/usr/bin/google-chrome';
-            browserPath = '/usr/bin/chromium-browser';
+            browserPath = '/usr/bin/google-chrome';
+            // browserPath = '/usr/bin/chromium-browser';
             break;
         }
     }
