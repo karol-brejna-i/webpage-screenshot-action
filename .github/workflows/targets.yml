@@ -1,4 +1,4 @@
-name: "Manual run of the action"
+name: "Use different targets"
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
         description: 'Script to run before the check'
         required: false
         type: multiline
-        default: 'console.log("Hello world!"); return 42;'
+        default: 'console.log("Hello world!"); result=42;'
 
 jobs:
   screenshot_external:
@@ -30,7 +30,7 @@ jobs:
           url: ${{ github.event.inputs.url }}
           scriptBefore: ${{ github.event.inputs.scriptBefore }}
       - run: |
-          ls
+          ls -lah
 
   local_file:
     name: Use local file (html file in the local filesystem)
@@ -48,7 +48,7 @@ jobs:
         with:
           url: file://${{github.workspace}}/examples/simple.html
       - run: |
-          ls
+          ls -lah
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
