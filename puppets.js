@@ -1,10 +1,10 @@
 const core = require('@actions/core');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const os = require("os");
 const path = require("path");
 
 const catchConsole = async function (page) {
-    page.on("pageerror", function (err) {
+    page.on('pageerror', function (err) {
         core.info(`Page error: ${err.toString()}`);
     });
 
@@ -22,22 +22,12 @@ const getBrowserPath = async function () {
     const type = os.type();
 
     let browserPath;
-    switch (type) {
-        case 'Windows_NT': {
-            const programFiles = process.env.PROGRAMFILES;
-            browserPath = path.join(programFiles, 'Google/Chrome/Application/chrome.exe');
-            break;
-        }
-        case 'Darwin': {
-            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-            break;
-        }
-        case 'Linux':
-        default: {
-            browserPath = '/usr/bin/google-chrome';
-            // browserPath = '/usr/bin/chromium-browser';
-            break;
-        }
+    if (type === 'Windows_NT') {
+        browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+    } else if (type === 'Darwin') {
+        browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    } else {
+        browserPath = '/usr/bin/google-chrome';
     }
     core.debug('Browser path: ' + browserPath);
     return browserPath;
@@ -49,15 +39,11 @@ const puppetRun = async function (parameters) {
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
 
-    // TODO make it right
     const launchOptions = {
         executablePath: await getBrowserPath(),
-        // args: ['--no-sandbox'],
-        defaultViewport: { width: 1920, height: 1080 },
-        // headless: true
+        headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
-
 
     // start the headless browser
     const browser = await puppeteer.launch(launchOptions);
@@ -82,7 +68,6 @@ const puppetRun = async function (parameters) {
             let response;
             try {
                 response = await page.goto(url, {waitUntil: "networkidle2"});
-                // await page.waitFor(3000);    
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
                 core.setFailed(error.message)
@@ -102,11 +87,8 @@ const puppetRun = async function (parameters) {
                     }
                     core.info(`Result: ${result}`);
                 }
-                const fullPageRequired = parameters.mode === "wholePage";
-                const fullPage = parameters.mode === "wholePage";
-                core.debug('fullPageRequired ' + fullPageRequired);
-                core.info("fullPage: " + fullPage);
-                const screenshotOptions = {path: parameters.output, fullPage}
+
+                const screenshotOptions = {path: parameters.output, fullPage:  parameters.mode === 'wholePage'}
                 core.info("Screenshot options: " + JSON.stringify(screenshotOptions));
                 await page.screenshot(screenshotOptions);
             }
