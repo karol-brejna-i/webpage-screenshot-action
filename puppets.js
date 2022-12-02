@@ -44,7 +44,7 @@ const puppetRun = async function (parameters) {
     const launchOptions = {
         executablePath: await getBrowserPath(),
         defaultViewport: {width, height},
-        // headless: true
+        headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
 
@@ -60,7 +60,6 @@ const puppetRun = async function (parameters) {
             // XXX TODO: DEBUG code:
             const version = await page.browser().version();
             core.info('Browser version: ' + version);
-
 
             // capture browser console, if required
             await catchConsole(page);
@@ -88,7 +87,7 @@ const puppetRun = async function (parameters) {
                         core.error(`Error in scriptBefore: ${error.message}`);
                         core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
                     }
-                    core.info(`Result: ${result}`);
+                    core.info(`Result: ${JSON.stringify(result)}`);
                 }
 
                 const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
