@@ -1,4 +1,4 @@
-name: "Manual run of the action"
+name: "Run action by checkout"
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
   workflow_dispatch:

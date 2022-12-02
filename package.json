@@ -26,7 +26,7 @@
   "homepage": "https://github.com/karol-brejna-i/webpage-screenshot-action#readme",
   "dependencies": {
     "@actions/core": "^1.10.0",
-    "puppeteer": "^19.3.0"
+    "puppeteer-core": "^19.3.0"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.34.0",
