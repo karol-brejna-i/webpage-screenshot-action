@@ -28191,7 +28191,7 @@ const puppetRun = async function (parameters) {
         executablePath: await getBrowserPath(),
         // args: ['--no-sandbox'],
         defaultViewport: { width: 1920, height: 1080 },
-        headless: true
+        // headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
 
@@ -28243,7 +28243,9 @@ const puppetRun = async function (parameters) {
                 const fullPage = parameters.mode === "wholePage";
                 core.debug('fullPageRequired ' + fullPageRequired);
                 core.info("fullPage: " + fullPage);
-                await page.screenshot({path: parameters.output, fullPage});
+                const screenshotOptions = {path: parameters.output, fullPage}
+                core.info("Screenshot options: " + JSON.stringify(screenshotOptions));
+                await page.screenshot(screenshotOptions);
             }
 
             return result;
