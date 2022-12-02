@@ -30,7 +30,7 @@ jobs:
           url: ${{ github.event.inputs.url }}
           scriptBefore: ${{ github.event.inputs.scriptBefore }}
       - run: |
-          ls
+          ls -lah
 
   local_file:
     name: Use local file (html file in the local filesystem)
@@ -48,7 +48,7 @@ jobs:
         with:
           url: file://${{github.workspace}}/examples/simple.html
       - run: |
-          ls
+          ls -lah
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
