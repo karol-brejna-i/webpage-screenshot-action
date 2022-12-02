@@ -1,4 +1,6 @@
 const process = require('process');
+
+
 const cp = require('child_process');
 const path = require('path');
 const tools = require('./tools');
@@ -68,12 +70,15 @@ test('test given output name', async () => {
     console.log('test given output name');
     cleanEnvs();
     process.env['INPUT_URL'] = 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md';
-    process.env['INPUT_OUTPUT'] = 'readme-screenshot.png';
+    process.env['INPUT_OUTPUT'] = 'readme-wholepage-screenshot.png';
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
-    await expect(result).toEqual(expect.stringContaining('{"url":"https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md"}'));
+    await expect(result).toEqual(expect.stringContaining(
+        '{"url":"https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md","result":{"screenshot":"readme-wholepage-screenshot.png"}}'
+    ));
+
 });
 
 test('test run without scriptBefore', async () => {
@@ -84,7 +89,7 @@ test('test run without scriptBefore', async () => {
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
-    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com"}'));
+    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":{"screenshot":"screenshot.png"}}'));
 });
 
 test('test run with scriptBefore', async () => {
@@ -96,7 +101,7 @@ test('test run with scriptBefore', async () => {
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
-    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":42}'));
+    await expect(result).toEqual(expect.stringContaining('{"url":"https://google.com","result":{"script":42,"screenshot":"screenshot.png"}}'));
 });
 
 test('test run with faulty scriptBefore', async () => {
