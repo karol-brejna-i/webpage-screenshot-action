@@ -21,7 +21,7 @@ const catchConsole = async function (page) {
 const getBrowserPath = async function () {
     const type = os.type();
 
-    let browserPath = undefined;
+    let browserPath;
     switch (type) {
         case 'Windows_NT': {
             const programFiles = process.env.PROGRAMFILES;
@@ -56,6 +56,7 @@ const puppetRun = async function (parameters) {
         defaultViewport: { width: 1920, height: 1080 },
         headless: true
     }
+    core.info('Launch options: ' + JSON.stringify(launchOptions));
 
 
     // start the headless browser
