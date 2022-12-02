@@ -26,4 +26,4 @@ jobs:
           url: ${{ github.event.inputs.url }}
           scriptBefore: ${{ github.event.inputs.scriptBefore }}
       - run: |
-          ls
+          ls -lah
