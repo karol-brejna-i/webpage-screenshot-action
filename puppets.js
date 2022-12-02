@@ -80,7 +80,8 @@ const puppetRun = async function (parameters) {
 
             let response;
             try {
-                response = await page.goto(url);
+                response = await page.goto(url, {waitUntil: "networkidle2"});
+                // await page.waitFor(3000);    
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
                 core.setFailed(error.message)
@@ -101,8 +102,10 @@ const puppetRun = async function (parameters) {
                     core.info(`Result: ${result}`);
                 }
                 const fullPageRequired = parameters.mode === "wholePage";
+                const fullPage = parameters.mode === "wholePage";
                 core.debug('fullPageRequired ' + fullPageRequired);
-                await page.screenshot({path: parameters.output, fullPage: fullPageRequired});
+                core.info("fullPage: " + fullPage);
+                await page.screenshot({path: parameters.output, fullPage});
             }
 
             return result;
