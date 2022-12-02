@@ -11,7 +11,7 @@ on:
         description: 'Script to run before the check'
         required: false
         type: multiline
-        default: 'console.log("Hello world!"); return 42;'
+        default: 'console.log("Hello world!"); result=42;'
 
 jobs:
   screenshot_external:
