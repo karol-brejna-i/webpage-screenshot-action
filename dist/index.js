@@ -28158,7 +28158,7 @@ const catchConsole = async function (page) {
 const getBrowserPath = async function () {
     const type = os.type();
 
-    let browserPath = undefined;
+    let browserPath;
     switch (type) {
         case 'Windows_NT': {
             const programFiles = process.env.PROGRAMFILES;
@@ -28181,7 +28181,7 @@ const getBrowserPath = async function () {
 }
 
 const puppetRun = async function (parameters) {
-    core.info('Puppet run.');
+    core.info('Puppet run new.');
 
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
@@ -28190,8 +28190,10 @@ const puppetRun = async function (parameters) {
     const launchOptions = {
         executablePath: await getBrowserPath(),
         // args: ['--no-sandbox'],
+        defaultViewport: { width: 1920, height: 1080 },
         headless: true
     }
+    core.info('Launch options: ' + JSON.stringify(launchOptions));
 
 
     // start the headless browser

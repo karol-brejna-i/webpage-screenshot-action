@@ -44,7 +44,7 @@ const getBrowserPath = async function () {
 }
 
 const puppetRun = async function (parameters) {
-    core.info('Puppet run.');
+    core.info('Puppet run new.');
 
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
