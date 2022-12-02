@@ -2,16 +2,16 @@ name: "Manual run of the action"
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
   workflow_dispatch:
-    inputs:
-      url:
-        description: 'URL to check'
-        required: true
-        default: 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md'
-      scriptBefore:
-        description: 'Script to run before the check'
-        required: false
-        type: multiline
-        default: 'console.log("Hello world!");'
+#    inputs:
+#      url:
+#        description: 'URL to check'
+#        required: true
+#        default: 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md'
+#      scriptBefore:
+#        description: 'Script to run before the check'
+#        required: false
+#        type: multiline
+#        default: 'console.log("Hello world!");'
 
 jobs:
 #  screenshot_external:
@@ -58,28 +58,28 @@ jobs:
 #            result = "I made it!";
 #      - run: |
 #          ls
-
-  local_file:
-    name: Use local file (html file in the local filesystem)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        id: checkout
-        with:
-          ref: develop
-      - run: |
-          ls examples/
-          cat examples/simple.html
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        id: openLocalFile
-        with:
-          url: file://${{github.workspace}}/examples/simple.html
-      - run: |
-          ls
-      - uses: actions/upload-artifact@v3
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/*.png
+#
+#  local_file:
+#    name: Use local file (html file in the local filesystem)
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#        id: checkout
+#        with:
+#          ref: develop
+#      - run: |
+#          ls examples/
+#          cat examples/simple.html
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        id: openLocalFile
+#        with:
+#          url: file://${{github.workspace}}/examples/simple.html
+#      - run: |
+#          ls
+#      - uses: actions/upload-artifact@v3
+#        with:
+#          name: screenshots
+#          path: ${{ github.workspace }}/*.png
 
   screenshot_readme:
     runs-on: ubuntu-latest
@@ -94,6 +94,8 @@ jobs:
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           output: readme-screenshot.png
+      - run: |
+          ls -la *.png
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
@@ -108,7 +110,7 @@ jobs:
           url: ${{ github.event.inputs.url }}
           fullPage: true
       - run: |
-          ls screenshots/
+          ls -la screenshots/
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
