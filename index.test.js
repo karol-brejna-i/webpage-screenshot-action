@@ -3,10 +3,15 @@ const cp = require('child_process');
 const path = require('path');
 const tools = require('./tools');
 
+const cleanEnvs = function () {
+    delete process.env['INPUT_MODE'];
+    delete process.env['INPUT_OUTPUT'];
+    delete process.env['INPUT_SCRIPTBEFORE'];
+}
 
 test('default mode', async () => {
     console.log("default mode");
-    delete process.env['INPUT_MODE']
+    cleanEnvs();
     const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).toBe('wholePage');
@@ -14,7 +19,8 @@ test('default mode', async () => {
 
 test('non-default mode', async () => {
     console.log('non-default mode');
-    process.env['INPUT_MODE'] = 'element';
+    cleanEnvs();
+    process.env['INPUT_MODE'] = 'page';
     const mode = await tools.getMode();
     console.log("mode: " + mode);
     await expect(mode).not.toBe('wholePage');
@@ -22,6 +28,7 @@ test('non-default mode', async () => {
 
 test('malformed URL input', async () => {
     console.log('malformed URL input');
+    cleanEnvs();
     process.env['INPUT_URL'] = 'malformed';
     const parameters = await tools.getParameters()
     await expect(tools.validateParameters(parameters)).rejects.toThrow('Please, provide a valid URL.');
@@ -29,7 +36,7 @@ test('malformed URL input', async () => {
 
 test('Fail without URL', async () => {
     console.log("Fail without URL");
-    delete process.env['INPUT_MODE'];
+    cleanEnvs();
     const ip = path.join(__dirname, 'index.js');
 
     try {
@@ -42,7 +49,8 @@ test('Fail without URL', async () => {
 });
 
 test('test parameter for element', () => {
-    console.log("test parameter for element");
+    console.log('test parameter for element');
+    cleanEnvs();
     process.env['INPUT_URL'] = 'https://google.com';
     process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
@@ -56,10 +64,22 @@ test('test parameter for element', () => {
     }
 });
 
+test('test given output name', async () => {
+    console.log('test given output name');
+    cleanEnvs();
+    process.env['INPUT_URL'] = 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md';
+    process.env['INPUT_OUTPUT'] = 'readme-screenshot.png';
+    const ip = path.join(__dirname, 'index.js');
+
+    const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+    console.log(result);
+    await expect(result).toEqual(expect.stringContaining('{"url":"https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md"}'));
+});
+
 test('test run without scriptBefore', async () => {
-    console.log("test run without scriptBefore");
+    console.log('test run without scriptBefore');
+    cleanEnvs();
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
     const ip = path.join(__dirname, 'index.js');
 
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
@@ -68,9 +88,9 @@ test('test run without scriptBefore', async () => {
 });
 
 test('test run with scriptBefore', async () => {
-    console.log("-test run with scriptBefore");
+    console.log('test run with scriptBefore');
+    cleanEnvs();
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'result = 42;';
     const ip = path.join(__dirname, 'index.js');
 
@@ -81,9 +101,10 @@ test('test run with scriptBefore', async () => {
 
 test('test run with faulty scriptBefore', async () => {
     console.log('test run with faulty scriptBefore');
+    cleanEnvs();
     process.env['INPUT_URL'] = 'https://google.com';
-    process.env['INPUT_MODE'] = 'element';
     process.env['INPUT_SCRIPTBEFORE'] = 'return 42;';
+    delete process.env['INPUT_MODE']
     const ip = path.join(__dirname, 'index.js');
 
     try {
@@ -100,6 +121,7 @@ test('test run with faulty scriptBefore', async () => {
 const TIMEOUT = 10000;
 test('test run with faulty url', async () => {
     console.log('test run with faulty url');
+    cleanEnvs();
 
     // the URL is technically valid, but it's not reachable
     process.env['INPUT_URL'] = 'https://ąśćżź.pl';

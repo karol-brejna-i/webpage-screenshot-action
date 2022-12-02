@@ -14,7 +14,7 @@ on:
         default: 'console.log("Hello world!"); result="OK";'
 
 jobs:
-  maceWindu:
+  mace_windu:
     runs-on: windows-latest
     defaults:
       run:

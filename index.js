@@ -8,7 +8,6 @@ async function run() {
         core.debug(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
         core.debug(`Parameters valid: ${parametersValid}`);
-
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
 

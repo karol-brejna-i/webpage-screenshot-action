@@ -1,7 +1,7 @@
 const core = require('@actions/core');
 
 let runMyScript = async function (page, theScript) {
-    core.info('runMyScript');
+    core.info('Running a script.');
     core.debug(theScript);
     const bodyHandle = await page.$('body');
 

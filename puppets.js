@@ -1,10 +1,10 @@
 const core = require('@actions/core');
-const puppeteer = require('puppeteer');
-const os = require("os");
-const path = require("path");
+const puppeteer = require('puppeteer'); // TODO check using puppeteer-core
+const os = require('os');
+const path = require('path');
 
 const catchConsole = async function (page) {
-    page.on("pageerror", function (err) {
+    page.on('pageerror', function (err) {
         core.info(`Page error: ${err.toString()}`);
     });
 
@@ -21,40 +21,32 @@ const catchConsole = async function (page) {
 const getBrowserPath = async function () {
     const type = os.type();
 
-    let browserPath = undefined;
-    switch (type) {
-        case 'Windows_NT': {
-            const programFiles = process.env.PROGRAMFILES;
-            browserPath = path.join(programFiles, 'Google/Chrome/Application/chrome.exe');
-            break;
-        }
-        case 'Darwin': {
-            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-            break;
-        }
-        case 'Linux':
-        default: {
-            browserPath = '/usr/bin/google-chrome';
-            break;
-        }
+    let browserPath;
+    if (type === 'Windows_NT') {
+        browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+    } else if (type === 'Darwin') {
+        browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    } else {
+        browserPath = '/usr/bin/google-chrome';
     }
     core.debug('Browser path: ' + browserPath);
     return browserPath;
 }
 
 const puppetRun = async function (parameters) {
-    core.info('Puppet run.');
+    core.info('Puppet run new.');
 
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
 
-    // TODO make it right
+    const width = parseInt(core.getInput('width')) | 800;
+    const height = parseInt(core.getInput('height')) | 600;
     const launchOptions = {
         executablePath: await getBrowserPath(),
-        args: ['--no-sandbox'],
-        headless: true
+        defaultViewport: {width, height},
+        // headless: true
     }
-
+    core.info('Launch options: ' + JSON.stringify(launchOptions));
 
     // start the headless browser
     const browser = await puppeteer.launch(launchOptions);
@@ -64,6 +56,12 @@ const puppetRun = async function (parameters) {
     const promises = urls.map(
         async (url) => {
             const page = await browser.newPage();
+
+            // XXX TODO: DEBUG code:
+            const version = await page.browser().version();
+            core.info('Browser version: ' + version);
+
+
             // capture browser console, if required
             await catchConsole(page);
 
@@ -72,11 +70,11 @@ const puppetRun = async function (parameters) {
 
             let response;
             try {
-                response = await page.goto(url);
+                response = await page.goto(url, {waitUntil: 'networkidle2'});
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
-                core.setFailed(error.message)
-                result = {"error": error.message};
+                core.setFailed(error.message);
+                result = {error: error.message};
             }
 
             if (response) {
@@ -85,14 +83,20 @@ const puppetRun = async function (parameters) {
 
                     const runMyScript = require('./script.js');
                     try {
-                        result = await runMyScript(page, scriptBefore);
+                        result = {script: await runMyScript(page, scriptBefore)};
                     } catch (error) {
                         core.error(`Error in scriptBefore: ${error.message}`);
                         core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
                     }
                     core.info(`Result: ${result}`);
                 }
-                await page.screenshot({path: parameters.output, fullPage: false});
+
+                const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
+                core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
+                await page.screenshot(screenshotOptions);
+                result = {
+                    ...result,
+                    screenshot: parameters.output};
             }
 
             return result;

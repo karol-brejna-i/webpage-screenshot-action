@@ -1,12 +1,8 @@
 const core = require('@actions/core');
 
 module.exports = {
-    getMode: async function () {
-        return new Promise(
-            (resolve => {
-                const result = core.getInput('mode') || 'wholePage';
-                resolve(result);
-            }));
+    getMode: function () {
+        return core.getInput('mode') || 'wholePage';
     },
 
     getParameters: async function () {
@@ -28,9 +24,7 @@ module.exports = {
                 });
             }));
     },
-    checkUrl: function(url) {
-        console.log('checkUrl: ' + url);
-
+    checkUrl: function (url) {
         try {
             const result = new URL(url)
             return Boolean(result);
@@ -48,6 +42,10 @@ module.exports = {
 
                 if (!parametersJson.url) {
                     throw Error('Please provide a URL.');
+                }
+
+                if (!parametersJson.mode) {
+                    throw Error('Please provide mode.');
                 }
 
                 if (!this.checkUrl(parametersJson.url)) {

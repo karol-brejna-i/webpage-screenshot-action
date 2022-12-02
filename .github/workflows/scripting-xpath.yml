@@ -23,7 +23,7 @@ jobs:
       - run: |
           ls
 
-  countParagraphs:
+  count_paragraphs:
     name: Count <p> elements
     runs-on: ubuntu-latest
     steps:
