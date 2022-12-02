@@ -95,7 +95,7 @@ jobs:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           output: readme-screenshot.png
       - run: |
-          ls -la *.png
+          ls -lah *.png
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
@@ -107,7 +107,7 @@ jobs:
       - name: Take photo of github.com
         uses: "lannonbr/puppeteer-screenshot-action@1.3.1"
         with:
-          url: ${{ github.event.inputs.url }}
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           fullPage: true
       - run: |
           ls -la screenshots/
