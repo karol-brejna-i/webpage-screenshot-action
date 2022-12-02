@@ -1,7 +1,7 @@
 const core = require('@actions/core');
-const puppeteer = require('puppeteer-core');
-const os = require("os");
-const path = require("path");
+const puppeteer = require('puppeteer'); // TODO check using puppeteer-core
+const os = require('os');
+const path = require('path');
 
 const catchConsole = async function (page) {
     page.on('pageerror', function (err) {
@@ -39,9 +39,12 @@ const puppetRun = async function (parameters) {
     const scriptBefore = parameters['scriptBefore'];
     const urls = [parameters['url']];
 
+    const width = parseInt(core.getInput('width')) | 800;
+    const height = parseInt(core.getInput('height')) | 600;
     const launchOptions = {
         executablePath: await getBrowserPath(),
-        headless: true
+        defaultViewport: {width, height},
+        // headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
 
@@ -67,11 +70,11 @@ const puppetRun = async function (parameters) {
 
             let response;
             try {
-                response = await page.goto(url, {waitUntil: "networkidle2"});
+                response = await page.goto(url, {waitUntil: 'networkidle2'});
             } catch (error) {
                 console.log('page.goto() resulted in error: ' + error);
-                core.setFailed(error.message)
-                result = {"error": error.message};
+                core.setFailed(error.message);
+                result = {error: error.message};
             }
 
             if (response) {
@@ -80,7 +83,7 @@ const puppetRun = async function (parameters) {
 
                     const runMyScript = require('./script.js');
                     try {
-                        result = await runMyScript(page, scriptBefore);
+                        result = {script: await runMyScript(page, scriptBefore)};
                     } catch (error) {
                         core.error(`Error in scriptBefore: ${error.message}`);
                         core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
@@ -88,9 +91,12 @@ const puppetRun = async function (parameters) {
                     core.info(`Result: ${result}`);
                 }
 
-                const screenshotOptions = {path: parameters.output, fullPage:  parameters.mode === 'wholePage'}
-                core.info("Screenshot options: " + JSON.stringify(screenshotOptions));
+                const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
+                core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
                 await page.screenshot(screenshotOptions);
+                result = {
+                    ...result,
+                    screenshot: parameters.output};
             }
 
             return result;

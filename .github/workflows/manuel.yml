@@ -2,86 +2,9 @@ name: "Manual run of the action"
 run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
 on:
   workflow_dispatch:
-#    inputs:
-#      url:
-#        description: 'URL to check'
-#        required: true
-#        default: 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md'
-#      scriptBefore:
-#        description: 'Script to run before the check'
-#        required: false
-#        type: multiline
-#        default: 'console.log("Hello world!");'
 
 jobs:
-#  screenshot_external:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - env:
-#          URL: ${{ github.event.inputs.url }}
-#          SCRIPT_BEFORE:
-#            ${{ github.event.inputs.scriptBefore }}
-#        run: |
-#          echo "URL: $URL"
-#          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-#
-#      - uses: karol-brejna-i/webpage-screenshot-action@develop
-#        id: screenshot
-#        with:
-#          url: ${{ github.event.inputs.url }}
-#          scriptBefore: ${{ github.event.inputs.scriptBefore }}
-#      - run: |
-#          ls
-#
-#  multiline:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - env:
-#          URL: ${{ github.event.inputs.url }}
-#          SCRIPT_BEFORE:
-#            ${{ github.event.inputs.scriptBefore }}
-#        run: |
-#          echo "URL: $URL"
-#          echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-#
-#      - uses: karol-brejna-i/webpage-screenshot-action@develop
-#        id: screenshot
-#        with:
-#          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
-#          scriptBefore: |
-#            const headerElement = document.createElement("h1");
-#            headerElement.innerHTML = "!+!-+!-+!-+!-!";
-#            const xpathExpression = '//h1';
-#            const firstChild = document.evaluate(xpathExpression, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-#            firstChild.parentNode.insertBefore(headerElement, firstChild);
-#
-#            result = "I made it!";
-#      - run: |
-#          ls
-#
-#  local_file:
-#    name: Use local file (html file in the local filesystem)
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v3
-#        id: checkout
-#        with:
-#          ref: develop
-#      - run: |
-#          ls examples/
-#          cat examples/simple.html
-#      - uses: karol-brejna-i/webpage-screenshot-action@develop
-#        id: openLocalFile
-#        with:
-#          url: file://${{github.workspace}}/examples/simple.html
-#      - run: |
-#          ls
-#      - uses: actions/upload-artifact@v3
-#        with:
-#          name: screenshots
-#          path: ${{ github.workspace }}/*.png
-
-  screenshot_readme:
+  readme_whole_page:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -93,7 +16,8 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-          output: readme-screenshot.png
+          output: readme-full-screenshot.png
+          mode: wholePage
       - run: |
           ls -lah *.png
       - uses: actions/upload-artifact@v3
@@ -101,17 +25,23 @@ jobs:
           name: screenshots
           path: ${{ github.workspace }}/*.png
 
-  obcak:
+  readme_page:
     runs-on: ubuntu-latest
     steps:
-      - name: Take photo of github.com
-        uses: "lannonbr/puppeteer-screenshot-action@1.3.1"
+      - run: |
+          which google-chrome
+          which chromium
+          google-chrome --version
+          chromium-browser --version
+
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-          fullPage: true
+          mode: page
+          output: readme-page-screenshot.png
       - run: |
-          ls -la screenshots/
+          ls -lah *.png
       - uses: actions/upload-artifact@v3
         with:
           name: screenshots
-          path: ${{ github.workspace }}/screenshots/*.png
+          path: ${{ github.workspace }}/*.png
