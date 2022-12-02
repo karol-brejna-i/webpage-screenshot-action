@@ -53,6 +53,7 @@ const puppetRun = async function (parameters) {
     const launchOptions = {
         executablePath: await getBrowserPath(),
         // args: ['--no-sandbox'],
+        defaultViewport: { width: 1920, height: 1080 },
         headless: true
     }
 
