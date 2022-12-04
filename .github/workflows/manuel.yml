@@ -4,57 +4,70 @@ on:
   workflow_dispatch:
 
 jobs:
-  readme_whole_page:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          which google-chrome
-          which chromium
-          google-chrome --version
-          chromium-browser --version
-
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        with:
-          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-          output: readme-full-screenshot.png
-          mode: wholePage
-      - run: |
-          ls -lah *.png
-      - uses: actions/upload-artifact@v3
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/*.png
-
-  readme_page:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          which google-chrome
-          which chromium
-          google-chrome --version
-          chromium-browser --version
-
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
-        with:
-          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-          mode: page
-          output: readme-page-screenshot.png
-      - run: |
-          ls -lah *.png
-      - uses: actions/upload-artifact@v3
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/*.png
+#  readme_whole_page:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - run: |
+#          which google-chrome
+#          which chromium
+#          google-chrome --version
+#          chromium-browser --version
+#
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        with:
+#          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+#          output: readme-full-screenshot.png
+#          mode: wholePage
+#      - run: |
+#          ls -lah *.png
+#      - uses: actions/upload-artifact@v3
+#        with:
+#          name: screenshots
+#          path: ${{ github.workspace }}/*.png
+#
+#  readme_page:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - run: |
+#          which google-chrome
+#          which chromium
+#          google-chrome --version
+#          chromium-browser --version
+#
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
+#        with:
+#          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+#          mode: page
+#          output: readme-page-screenshot.png
+#      - run: |
+#          ls -lah *.png
+#      - uses: actions/upload-artifact@v3
+#        with:
+#          name: screenshots
+#          path: ${{ github.workspace }}/*.png
 
   setup_chrome:
     runs-on: ubuntu-latest
     steps:
-      - uses: browser-actions/setup-chrome@latest
+      -
+      - run: |
+          echo "Old versions"
+          ls -lah /usr/bin/*chrom*
+          ls -lah /usr/bin/chrom*
+      - run: |
+          google-chrome --version
+          google-chrome-stable --version
+
+      - uses: logikal-io/install-chrome@v1.0.0
         with:
-          chrome-version: stable
-      - run: chrome --version
+          version: 108.0.5359.94-1
+
+      - run: |
+          google-chrome --version
+          google-chrome-stable --version
       - run: |
           which google-chrome
+          which google-chrome-stable
           which chromium
           which chrome
           google-chrome --version
@@ -62,19 +75,7 @@ jobs:
       - run: |
           ls -lah /usr/bin/*chrom*
           ls -lah /usr/bin/chrom*
-      - run: |
-          CHROME_PATH=$(which chrome)
-          cp $CHROME_PATH /usr/bin/google-chrome
-          echo $CHROME_PATH
-      - run: |
-          which google-chrome
-          which chromium
-          which chrome
-          google-chrome --version
-          chromium-browser --version
-      - run: |
-          ls -lah /usr/bin/*chrom*
-          ls -lah /usr/bin/chrom*
+
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
