@@ -24,7 +24,7 @@ jobs:
         run: |
           echo "URL: $URL"
           echo "SCRIPT_BEFORE: $SCRIPT_BEFORE"
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
         id: screenshot
         with:
           url: ${{ github.event.inputs.url }}
@@ -43,7 +43,7 @@ jobs:
       - run: |
           ls examples/
           cat examples/simple.html
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
         id: openLocalFile
         with:
           url: file://${{github.workspace}}/examples/simple.html
