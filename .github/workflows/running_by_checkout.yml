@@ -6,7 +6,7 @@ on:
       url:
         description: 'URL to check'
         required: true
-        default: 'https://google.com'
+        default: 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md'
       scriptBefore:
         description: 'Script to run before the check'
         required: false

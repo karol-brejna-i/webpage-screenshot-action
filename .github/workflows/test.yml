@@ -23,4 +23,4 @@ jobs:
     - run: npm install
     - uses: ./
       with:
-        URL: https://google.com
+        URL: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
