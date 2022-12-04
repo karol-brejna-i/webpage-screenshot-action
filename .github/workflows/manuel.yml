@@ -50,13 +50,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: browser-actions/setup-chrome@latest
-      - run: chrome --version
         with:
           chrome-version: stable
+      - run: chrome --version
       - run: |
           which google-chrome
           which chromium
-          which google
+          which chrome
           google-chrome --version
           chromium-browser --version
           ls -lah /usr/bin/
