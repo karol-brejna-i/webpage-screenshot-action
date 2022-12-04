@@ -7,7 +7,7 @@ jobs:
     search:
       runs-on: ubuntu-latest
       steps:
-        - uses: karol-brejna-i/webpage-screenshot-action@develop
+        - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
           id: answer
           with:
             url: https://en.wikipedia.org/wiki/42_(number)
