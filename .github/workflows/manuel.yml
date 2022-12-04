@@ -47,11 +47,12 @@ jobs:
           path: ${{ github.workspace }}/*.png
 
   setup_chrome:
-      steps:
-        - uses: browser-actions/setup-chrome@latest
-        - run: chrome --version
-        - run: |
-            which google-chrome
-            which chromium
-            google-chrome --version
-            chromium-browser --version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: browser-actions/setup-chrome@latest
+      - run: chrome --version
+      - run: |
+          which google-chrome
+          which chromium
+          google-chrome --version
+          chromium-browser --version
