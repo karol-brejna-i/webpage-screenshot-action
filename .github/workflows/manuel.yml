@@ -65,6 +65,16 @@ jobs:
       - run: |
           CHROME_PATH=$(which chrome)
           cp $CHROME_PATH /usr/bin/google-chrome
+          echo $CHROME_PATH
+      - run: |
+          which google-chrome
+          which chromium
+          which chrome
+          google-chrome --version
+          chromium-browser --version
+      - run: |
+          ls -lah /usr/bin/*chrom*
+          ls -lah /usr/bin/chrom*
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
