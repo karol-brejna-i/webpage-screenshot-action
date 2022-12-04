@@ -54,5 +54,7 @@ jobs:
       - run: |
           which google-chrome
           which chromium
+          which google
           google-chrome --version
           chromium-browser --version
+          ls -lah /usr/bin/
