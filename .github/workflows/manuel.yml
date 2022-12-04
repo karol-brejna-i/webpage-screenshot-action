@@ -45,7 +45,6 @@ jobs:
 #        with:
 #          name: screenshots
 #          path: ${{ github.workspace }}/*.png
-
   setup_chrome:
     runs-on: ubuntu-latest
     steps:
