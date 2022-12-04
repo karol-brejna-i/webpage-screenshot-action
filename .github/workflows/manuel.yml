@@ -49,7 +49,6 @@ jobs:
   setup_chrome:
     runs-on: ubuntu-latest
     steps:
-      -
       - run: |
           echo "Old versions"
           ls -lah /usr/bin/*chrom*
