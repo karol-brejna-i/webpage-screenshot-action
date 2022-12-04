@@ -51,6 +51,8 @@ jobs:
     steps:
       - uses: browser-actions/setup-chrome@latest
       - run: chrome --version
+        with:
+          chrome-version: stable
       - run: |
           which google-chrome
           which chromium
