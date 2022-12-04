@@ -1,4 +1,4 @@
-name: "Browser scripting - xpath expressions)"
+name: "Browser scripting - xpath expressions"
 run-name: ${{ github.actor }} is trying xpath expressions 🚀
 on:
   workflow_dispatch:
