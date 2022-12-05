@@ -131,7 +131,7 @@ On the right side, you can see the screenshot taken by the action.
 #### Take a screenshot of first table in a document
 The following workflow takes a screenshot of the first table in the README.md file and saves it in a file called `element.png`.
 
-<img src="assets/element.png" height="420" alt="My Image" align="right" style="float:right" />
+<img src="assets/element-screenshot.png" height="420" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Element's screenshot
