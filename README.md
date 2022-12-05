@@ -83,18 +83,23 @@ XPath selector of an HTML page element, i.e. `//*[@id="www-wikipedia-org"]/div[1
 Only used if _mode_ is `element` or `scrollToElement`.
 
 ### Examples
-Let's consider the following use cases for the action:
-- taking a screenshot of a web page
-  - [whole page](#whole-page) screenshot and upload it as an artifact
-  - Selected [element](#element) screenshot
-- [Running a script](#running-a-script) before taking a screenshot
-  - Returning a [value](#returning-a-value) from the script
-  - Counting the number of elements on a page
-  - Checking if given text is present in the page
-  - Manipulating DOM (insert element before first \<h1\>)
+The [detailed examples](examples/README.md) show different aspects of the usage of the action.
+- How the workflow is started
+- What do we want to capture ("living" web page, a file from a PR, a page served by your workflow)
+- How do we want to capture it (whole page, a specific element, a fragment of the page, etc.) 
+- What do we want to do with the captured image (upload it to a PR, attach it to a release, etc.)
+
+
+      Please, mind that the sole responsibility of the action is to take 
+      a screenshot of a web page (or run a script for that page). 
+      What is done with the screenshot is entirely up to you and should be handled by your workflow.
+
+Here are some basic examples.
 
 #### Upload artifact example
 The following workflow takes a whole page screenshot and uploads it as an artifact.
+
+<img src="./sassets/dedicated-chrome-screenshot.png" width="128" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Upload screenshot
@@ -102,7 +107,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   screenshots:
@@ -111,12 +116,15 @@ jobs:
       - uses: actions/checkout@v3
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
-          url: file://${{github.workspace}}/examples/simple.html
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
       - uses: actions/upload-artifact@v3
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png
 ```
+
+This workflow is fired when some changes are pushed to the main branch, or it can be triggered manually.
+It makes a whole page screenshot of the README.md file and uploads it as an artifact.
 
 ## License
 
