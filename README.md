@@ -99,7 +99,7 @@ Here are some basic examples.
 #### Upload artifact example
 The following workflow takes a whole page screenshot and uploads it as an artifact.
 
-<img src="./sassets/dedicated-chrome-screenshot.png" width="128" alt="My Image" align="right" style="float:right" />
+<img src="assets/dedicated-chrome-screenshot.png" width="128" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Upload screenshot
