@@ -21,6 +21,7 @@ jobs:
             }
       - run: |
           ls
+
   count_headers:
     name: Count <h2> elements
     runs-on: ubuntu-latest
