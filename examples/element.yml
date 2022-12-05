@@ -1,9 +1,6 @@
 name: Element's screenshot
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   screenshots:
@@ -15,7 +12,7 @@ jobs:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
           xpath: //table[1]
-          output: element.png
+          output: element-screenshot.png
       - uses: actions/upload-artifact@v3
         with:
           name: simple-screenshot
