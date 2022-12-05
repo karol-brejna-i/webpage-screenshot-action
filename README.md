@@ -83,18 +83,23 @@ XPath selector of an HTML page element, i.e. `//*[@id="www-wikipedia-org"]/div[1
 Only used if _mode_ is `element` or `scrollToElement`.
 
 ### Examples
-Let's consider the following use cases for the action:
-- taking a screenshot of a web page
-  - [whole page](#whole-page) screenshot and upload it as an artifact
-  - Selected [element](#element) screenshot
-- [Running a script](#running-a-script) before taking a screenshot
-  - Returning a [value](#returning-a-value) from the script
-  - Counting the number of elements on a page
-  - Checking if given text is present in the page
-  - Manipulating DOM (insert element before first \<h1\>)
+The [detailed examples](examples/README.md) show different aspects of the usage of the action.
+- How the workflow is started
+- What do we want to capture ("living" web page, a file from a PR, a page served by your workflow)
+- How do we want to capture it (whole page, a specific element, a fragment of the page, etc.) 
+- What do we want to do with the captured image (upload it to a PR, attach it to a release, etc.)
 
-#### Upload artifact example
+
+      Please, mind that the sole responsibility of the action is to take 
+      a screenshot of a web page (or run a script for that page). 
+      What is done with the screenshot is entirely up to you and should be handled by your workflow.
+
+Here are some basic examples.
+
+#### Full page screenshot + upload as an artifact 
 The following workflow takes a whole page screenshot and uploads it as an artifact.
+
+<img src="assets/dedicated-chrome-screenshot.png" height="420" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Upload screenshot
@@ -102,7 +107,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   screenshots:
@@ -111,12 +116,47 @@ jobs:
       - uses: actions/checkout@v3
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
-          url: file://${{github.workspace}}/examples/simple.html
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
       - uses: actions/upload-artifact@v3
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png
 ```
+
+[This workflow](examples/upload_artifact.yml) is fired when some changes are pushed to the main branch, or it can be triggered manually.
+It makes a whole page screenshot of the README.md file and uploads it as an artifact.
+On the right side, you can see the screenshot taken by the action.
+
+
+#### Take a screenshot of first table in a document
+Let's assume that you want to make a screenshot of the first table in a document.
+
+<img src="assets/element-screenshot.png" width="240" alt="My Image" align="right" style="float:right" />
+
+```yaml
+name: Element's screenshot
+on:
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+        with:
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+          mode: element
+          xpath: //table[1]
+          output: element-screenshot.png
+      - uses: actions/upload-artifact@v3
+        with:
+          name: simple-screenshot
+          path: ${{ github.workspace }}/*.png
+```
+
+[This workflow](examples/element.yml) takes a screenshot of the first table in the README.md file and saves it in a file called `element.png`.
+The element to capture is specified by the XPath selector `//table[1]`.
 
 ## License
 

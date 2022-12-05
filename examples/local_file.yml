@@ -13,4 +13,3 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: file://${{github.workspace}}/examples/simple.html
-

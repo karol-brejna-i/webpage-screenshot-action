@@ -33,6 +33,36 @@ const getBrowserPath = async function () {
     return browserPath;
 }
 
+const takePageScreenshot = async function (page, parameters) {
+    core.info(`Take page's screenshot.`);
+    const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
+    core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
+    await page.screenshot(screenshotOptions);
+    return true;
+}
+
+const takeElementScreenshot = async function (page, parameters) {
+    core.info(`Take element's screenshot.`);
+    let element;
+    if (parameters.selector) {
+        element = await page.$(parameters.selector);
+    } else if (parameters.xpath) {
+        const elements = await page.$x(parameters.xpath);
+        element = elements[0];
+    } else {
+        core.error('No selector or xpath provided.');
+        return false;
+    }
+    core.debug(`Element: ${element}`);
+    if (!element) {
+        core.warning('Element not found.');
+        return false;
+    } else {
+        await element.screenshot({path: parameters.output});
+        return true;
+    }
+}
+
 const puppetRun = async function (parameters) {
     core.info('Puppet run new.');
 
@@ -65,7 +95,7 @@ const puppetRun = async function (parameters) {
             await catchConsole(page);
 
             // for result construction
-            let result = undefined;
+            let result = {};
 
             let response;
             try {
@@ -90,12 +120,15 @@ const puppetRun = async function (parameters) {
                     core.info(`Result: ${JSON.stringify(result)}`);
                 }
 
-                const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
-                core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
-                await page.screenshot(screenshotOptions);
-                result = {
-                    ...result,
-                    screenshot: parameters.output};
+                let success;
+                if (parameters.mode === 'page' || parameters.mode === 'wholePage') {
+                    success = await takePageScreenshot(page, parameters);
+                } else if (parameters.mode === 'element') {
+                    success = await takeElementScreenshot(page, parameters);
+                }
+                if (success) {
+                    result.screenshot = parameters.output;
+                }
             }
 
             return result;
