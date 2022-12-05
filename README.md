@@ -96,10 +96,10 @@ The [detailed examples](examples/README.md) show different aspects of the usage 
 
 Here are some basic examples.
 
-#### Upload artifact example
+#### Full page screenshot + upload as an artifact 
 The following workflow takes a whole page screenshot and uploads it as an artifact.
 
-<img src="assets/dedicated-chrome-screenshot.png" width="128" alt="My Image" align="right" style="float:right" />
+<img src="assets/dedicated-chrome-screenshot.png" height="420" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Upload screenshot
@@ -123,8 +123,45 @@ jobs:
           path: ${{ github.workspace }}/*.png
 ```
 
-This workflow is fired when some changes are pushed to the main branch, or it can be triggered manually.
+[This workflow](examples/upload_artifact.yml) is fired when some changes are pushed to the main branch, or it can be triggered manually.
 It makes a whole page screenshot of the README.md file and uploads it as an artifact.
+On the right side, you can see the screenshot taken by the action.
+
+
+#### Take a screenshot of first table in a document
+The following workflow takes a screenshot of the first table in the README.md file and saves it in a file called `element.png`.
+
+<img src="assets/element.png" height="420" alt="My Image" align="right" style="float:right" />
+
+```yaml
+name: Element's screenshot
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        with:
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+          mode: element
+          xpath: //table[1]
+          output: element.png
+      - uses: actions/upload-artifact@v3
+        with:
+          name: simple-screenshot
+          path: ${{ github.workspace }}/*.png
+```
+
+[This workflow](examples/element.yml) is fired when some changes are pushed to the main branch, or it can be triggered manually.
+It makes a whole page screenshot of the README.md file and uploads it as an artifact.
+On the right side, you can see the screenshot taken by the action.
+
 
 ## License
 
