@@ -126,10 +126,6 @@ const puppetRun = async function (parameters) {
                 } else if (parameters.mode === 'element') {
                     success = await takeElementScreenshot(page, parameters);
                 }
-
-                // result = {
-                //     ...result
-                // }
                 if (success) {
                     result.screenshot = parameters.output;
                 }
