@@ -159,7 +159,7 @@ The element to capture is specified by the XPath selector `//table[1]`.
 #### Scroll view to a specific element and take a screenshot
 Let's see the difference between `scrollToElement` and `element` modes.
 
-<img src="assets/element-screenshot.png" width="240" alt="My Image" align="right" style="float:right" />
+<img src="assets/scroll-to-element-screenshot.png" width="240" alt="My Image" align="right" style="float:right" />
 
 ```yaml
 name: Screenshot from a scrolled page
@@ -183,9 +183,10 @@ jobs:
           path: ${{ github.workspace }}/*.png
 ```
 
-[This workflow](examples/element.yml) opens the README.md, scrolls the view  
-file and saves it in a file called `element.png`.
-The element to capture is specified by the XPath selector `//table[1]`.
+[This workflow](examples/scroll_to_element.yml) opens the README.md file, scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
+It saves the screenshot in a file called `element.png`.
+Please, mind that for `element` mode only the specified element is captured.
+In `scrollToView` the screenshot capters the viewport starting from the element.
 ## License
 
 The scripts and documentation in this project are released under the [Apache 2.0](LICENSE).
