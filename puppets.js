@@ -41,9 +41,8 @@ const takePageScreenshot = async function (page, parameters) {
     return true;
 }
 
-const takeElementScreenshot = async function (page, parameters) {
-    core.info(`Take element's screenshot.`);
-    let element;
+const getElement = async function(parameters, page) {
+    let element = undefined
     if (parameters.selector) {
         element = await page.$(parameters.selector);
     } else if (parameters.xpath) {
@@ -51,8 +50,29 @@ const takeElementScreenshot = async function (page, parameters) {
         element = elements[0];
     } else {
         core.error('No selector or xpath provided.');
-        return false;
     }
+    return element;
+}
+const scrollToElementScreenshot = async function (page, parameters) {
+    core.info(`Scroll to element and screenshot.`);
+    let element;
+    element = await getElement(parameters, page);
+    core.debug(`Element: ${element}`);
+    if (!element) {
+        core.warning('Element not found.');
+        return false;
+    } else {
+        // scroll to element
+        await page.evaluate(el => el.scrollIntoView(), element);
+        await takePageScreenshot(page, parameters);
+        return true;
+    }
+}
+
+const takeElementScreenshot = async function (page, parameters) {
+    core.info(`Take element's screenshot.`);
+    let element;
+    element = await getElement(parameters, page);
     core.debug(`Element: ${element}`);
     if (!element) {
         core.warning('Element not found.');
@@ -125,6 +145,8 @@ const puppetRun = async function (parameters) {
                     success = await takePageScreenshot(page, parameters);
                 } else if (parameters.mode === 'element') {
                     success = await takeElementScreenshot(page, parameters);
+                } else if (parameters.mode === 'scrollToElement') {
+                    success = await scrollToElementScreenshot(page, parameters);
                 }
                 if (success) {
                     result.screenshot = parameters.output;
