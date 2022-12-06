@@ -7,7 +7,7 @@ jobs:
 #  readme_whole_page:
 #    runs-on: ubuntu-latest
 #    steps:
-#      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
 #        with:
 #          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
 #          output: readme-full-screenshot.png
@@ -27,7 +27,7 @@ jobs:
 #          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
 #          mode: page
 #          output: readme-page-screenshot.png
-#      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
 #        with:
 #          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
 #          mode: element
@@ -46,13 +46,13 @@ jobs:
 #      - run: |
 #          google-chrome --version
 #          google-chrome-stable --version
-#      - uses: logikal-io/install-chrome@v1.0.0
+#      - uses: logikal-io/install-chrome@develop
 #        with:
 #          version: 108.0.5359.94-1
 #      - run: |
 #          google-chrome --version
 #          google-chrome-stable --version
-#      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+#      - uses: karol-brejna-i/webpage-screenshot-action@develop
 #        with:
 #          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
 #          output: dedicated-chrome-screenshot.png
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -115,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
