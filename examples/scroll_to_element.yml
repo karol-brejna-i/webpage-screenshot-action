@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  screenshots:
+  by_xpath:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -12,7 +12,22 @@ jobs:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
           xpath: //table[1]
-          output: scroll-to-element-screenshot.png
+          output: scroll-to-element-xpath-screenshot.png
+      - uses: actions/upload-artifact@v3
+        with:
+          name: simple-screenshot
+          path: ${{ github.workspace }}/*.png
+
+  by_selector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+        with:
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+          mode: scrollToElement
+          selector: table
+          output: scroll-to-element-selector-screenshot.png
       - uses: actions/upload-artifact@v3
         with:
           name: simple-screenshot
