@@ -185,8 +185,10 @@ jobs:
 
 [This workflow](examples/scroll_to_element.yml) opens the README.md file, scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
 It saves the screenshot in a file called `element.png`.
+
+
 Please, mind that for `element` mode only the specified element is captured.
-In `scrollToView` the screenshot capters the viewport starting from the element.
+In `scrollToView` the screenshot captures the viewport starting from the element (so the following elements are also included).
 ## License
 
 The scripts and documentation in this project are released under the [Apache 2.0](LICENSE).
