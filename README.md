@@ -29,8 +29,6 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
         with:
           url: https://google.com
-      - run: |
-          ls
 ```
 
 This workflow fires when some changes are pushed to the main branch. 
