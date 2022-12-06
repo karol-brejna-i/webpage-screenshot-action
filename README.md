@@ -156,6 +156,36 @@ jobs:
 [This workflow](examples/element.yml) takes a screenshot of the first table in the README.md file and saves it in a file called `element.png`.
 The element to capture is specified by the XPath selector `//table[1]`.
 
+#### Scroll view to a specific element and take a screenshot
+Let's see the difference between `scrollToElement` and `element` modes.
+
+<img src="assets/element-screenshot.png" width="240" alt="My Image" align="right" style="float:right" />
+
+```yaml
+name: Screenshot from a scrolled page
+on:
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+        with:
+          url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+          mode: scrollToElement
+          xpath: //table[1]
+          output: scroll-to-element-screenshot.png
+      - uses: actions/upload-artifact@v3
+        with:
+          name: simple-screenshot
+          path: ${{ github.workspace }}/*.png
+```
+
+[This workflow](examples/element.yml) opens the README.md, scrolls the view  
+file and saves it in a file called `element.png`.
+The element to capture is specified by the XPath selector `//table[1]`.
 ## License
 
 The scripts and documentation in this project are released under the [Apache 2.0](LICENSE).
