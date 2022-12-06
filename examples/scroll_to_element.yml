@@ -1,4 +1,4 @@
-name: Element's screenshot
+name: Screenshot from a scrolled page
 on:
   workflow_dispatch:
 
@@ -10,9 +10,9 @@ jobs:
       - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-          mode: element
+          mode: scrollToElement
           xpath: //table[1]
-          output: element-screenshot.png
+          output: scroll-to-element-screenshot.png
       - uses: actions/upload-artifact@v3
         with:
           name: simple-screenshot
