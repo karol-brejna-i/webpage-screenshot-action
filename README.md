@@ -32,10 +32,13 @@ jobs:
 ```
 
 This workflow fires when some changes are pushed to the main branch. 
-It takes a screenshot of the whole web page under provided URL (https://google.com) and saves it as _screenshot.png_.
+It **takes a screenshot** of the whole web page under provided URL (https://google.com) and saves it as _screenshot.png_.
+
+Additionally, it **sets the output variable** _scriptResult_ for other steps/jobs to use.
+(The value holds the URL, screenshot file name and optionally javascript code result, i.e. `[{"url":"https://google.com","result":{"screenshot":"screenshot.png"}}]`).
+
 
 The behavior or the action can be modified by providing proper input parameters.
-
 Let's discuss the configuration options first and then see some actual examples. 
 
 ### Configuration
