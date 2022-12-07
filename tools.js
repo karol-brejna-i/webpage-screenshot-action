@@ -55,7 +55,7 @@ module.exports = {
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
                     if (!parametersJson.xpath && !parametersJson.selector) {
-                        throw Error(`Please provide xpath or selector for '${parametersJson.mode} mode.`);
+                        throw Error(`Please provide xpath or selector for '${parametersJson.mode}' mode.`);
                     }
                 }
 

@@ -26,16 +26,19 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://google.com
 ```
 
 This workflow fires when some changes are pushed to the main branch. 
-It takes a screenshot of the whole web page under provided URL (https://google.com) and saves it as _screenshot.png_.
+It **takes a screenshot** of the whole web page under provided URL (https://google.com) and saves it as _screenshot.png_.
+
+Additionally, it **sets the output variable** _scriptResult_ for other steps/jobs to use.
+(The value holds the URL, screenshot file name and optionally javascript code result, i.e. `[{"url":"https://google.com","result":{"screenshot":"screenshot.png"}}]`).
+
 
 The behavior or the action can be modified by providing proper input parameters.
-
 Let's discuss the configuration options first and then see some actual examples. 
 
 ### Configuration
@@ -111,8 +114,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
       - uses: actions/upload-artifact@v3
@@ -140,8 +142,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -170,8 +171,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -183,12 +183,40 @@ jobs:
           path: ${{ github.workspace }}/*.png
 ```
 
-[This workflow](examples/scroll_to_element.yml) opens the README.md file, scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
+[This workflow](examples/scroll_to_element.yml) opens the README.md file,
+scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
 It saves the screenshot in a file called `element.png`.
 
 
 Please, mind that for `element` mode only the specified element is captured.
 In `scrollToView` the screenshot captures the viewport starting from the element (so the following elements are also included).
+
+#### Local file screenshot
+The action can also take a screenshot of a local file.
+```yaml
+name: Local file screenshot
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
+        id: screenshot
+        with:
+          url: file://${{github.workspace}}/examples/simple.html
+```
+
+[This workflow](examples/local_file.yml) checks out the repository and takes a screenshot of one of the files in the repo (`examples/simple.html`).
+
+Please, note how the URL is constructed. The `file://` prefix is used to specify that the file is local
+and the `${{github.workspace}}` variable is used to resolve the path where git repository was checked out.
+This could be any path on the machine where the action is running, as long as it constitutes a valid URL.
+
 ## License
 
 The scripts and documentation in this project are released under the [Apache 2.0](LICENSE).
