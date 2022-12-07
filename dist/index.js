@@ -28401,7 +28401,7 @@ module.exports = {
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
                     if (!parametersJson.xpath && !parametersJson.selector) {
-                        throw Error(`Please provide xpath or selector for '${parametersJson.mode} mode.`);
+                        throw Error(`Please provide xpath or selector for '${parametersJson.mode}' mode.`);
                     }
                 }
 
@@ -55326,10 +55326,13 @@ const {puppetRun} = __nccwpck_require__(9367);
 
 async function run() {
     try {
+        // obtain and validate parameters
         const parameters = await tools.getParameters();
         core.debug(`Parameters: ${JSON.stringify(parameters)}`);
         const parametersValid = await tools.validateParameters(parameters);
         core.debug(`Parameters valid: ${parametersValid}`);
+
+        // run the action logic and return the results
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
 

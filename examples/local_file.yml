@@ -1,4 +1,4 @@
-name: Upload screenshot
+name: Local file screenshot
 on:
   workflow_dispatch:
   push:

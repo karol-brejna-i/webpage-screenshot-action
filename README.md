@@ -183,12 +183,40 @@ jobs:
           path: ${{ github.workspace }}/*.png
 ```
 
-[This workflow](examples/scroll_to_element.yml) opens the README.md file, scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
+[This workflow](examples/scroll_to_element.yml) opens the README.md file,
+scrolls the view to the first table (`xpath: //table[1]`) and takes a screenshot of the page.  
 It saves the screenshot in a file called `element.png`.
 
 
 Please, mind that for `element` mode only the specified element is captured.
 In `scrollToView` the screenshot captures the viewport starting from the element (so the following elements are also included).
+
+#### Local file screenshot
+The action can also take a screenshot of a local file.
+```yaml
+name: Local file screenshot
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
+        with:
+          url: file://${{github.workspace}}/examples/simple.html
+```
+
+[This workflow](examples/local_file.yml) checks out the repository and takes a screenshot of one of the files in the repo (`examples/simple.html`).
+
+Please, note how the URL is constructed. The `file://` prefix is used to specify that the file is local
+and the `${{github.workspace}}` variable is used to resolve the path where git repository was checked out.
+This could be any path on the machine where the action is running, as long as it constitutes a valid URL.
+
 ## License
 
 The scripts and documentation in this project are released under the [Apache 2.0](LICENSE).

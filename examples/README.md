@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@@v1g
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: page
