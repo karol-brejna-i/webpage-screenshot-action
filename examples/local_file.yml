@@ -10,6 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: file://${{github.workspace}}/examples/simple.html

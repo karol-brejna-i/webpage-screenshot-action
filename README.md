@@ -26,7 +26,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://google.com
 ```
@@ -111,8 +111,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
       - uses: actions/upload-artifact@v3
@@ -140,8 +139,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -170,8 +168,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1.0.0
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -205,8 +202,8 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
+        id: screenshot
         with:
           url: file://${{github.workspace}}/examples/simple.html
 ```
