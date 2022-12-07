@@ -142,9 +142,16 @@ jobs:
     outputs:
       result: ${{ steps.screenshot.outputs.scriptResult }}
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: screenshot
         with:
           url: https://google.com
       - run: |
           ls
+  job2:
+    runs-on: ubuntu-latest
+    needs: screenshots
+    steps:
+      - run: |
+          echo "-----------------------------------"
+          echo ${{needs.screenshots.outputs.result}}
