@@ -1,5 +1,5 @@
 const core = require('@actions/core');
-const puppeteer = require('puppeteer'); // TODO check using puppeteer-core
+const puppeteer = require('puppeteer-core'); // TODO check using puppeteer-core
 const os = require('os');
 const path = require('path');
 
