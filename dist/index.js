@@ -24798,7 +24798,7 @@ function defaultCallback(err) {
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
-const puppeteer = __nccwpck_require__(4807); // TODO check using puppeteer-core
+const puppeteer = __nccwpck_require__(4807);
 const os = __nccwpck_require__(2037);
 const path = __nccwpck_require__(1017);
 
