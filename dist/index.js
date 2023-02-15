@@ -3064,6 +3064,2565 @@ chownr.sync = chownrSync
 
 /***/ }),
 
+/***/ 985:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BidiServer = void 0;
+const EventEmitter_js_1 = __nccwpck_require__(6111);
+const processingQueue_js_1 = __nccwpck_require__(9300);
+const EventManager_js_1 = __nccwpck_require__(8701);
+const CommandProcessor_js_1 = __nccwpck_require__(7002);
+const browsingContextStorage_js_1 = __nccwpck_require__(7652);
+class BidiServer extends EventEmitter_js_1.EventEmitter {
+    #messageQueue;
+    #transport;
+    #commandProcessor;
+    constructor(bidiTransport, cdpConnection, selfTargetId, parser) {
+        super();
+        this.#messageQueue = new processingQueue_js_1.ProcessingQueue(this.#processOutgoingMessage);
+        this.#transport = bidiTransport;
+        this.#transport.setOnMessage(this.#handleIncomingMessage);
+        this.#commandProcessor = new CommandProcessor_js_1.CommandProcessor(cdpConnection, new EventManager_js_1.EventManager(this), selfTargetId, parser);
+        this.#commandProcessor.on('response', (response) => {
+            this.emitOutgoingMessage(response);
+        });
+    }
+    static async createAndStart(bidiTransport, cdpConnection, selfTargetId, parser) {
+        const server = new BidiServer(bidiTransport, cdpConnection, selfTargetId, parser);
+        const cdpClient = cdpConnection.browserClient();
+        // Needed to get events about new targets.
+        await cdpClient.sendCommand('Target.setDiscoverTargets', { discover: true });
+        // Needed to automatically attach to new targets.
+        await cdpClient.sendCommand('Target.setAutoAttach', {
+            autoAttach: true,
+            waitForDebuggerOnStart: true,
+            flatten: true,
+        });
+        await Promise.all(browsingContextStorage_js_1.BrowsingContextStorage.getTopLevelContexts().map((c) => c.awaitLoaded()));
+        return server;
+    }
+    #processOutgoingMessage = async (messageEntry) => {
+        const message = messageEntry.message;
+        if (messageEntry.channel !== null) {
+            message['channel'] = messageEntry.channel;
+        }
+        await this.#transport.sendMessage(message);
+    };
+    /**
+     * Sends BiDi message.
+     */
+    emitOutgoingMessage(messageEntry) {
+        this.#messageQueue.add(messageEntry);
+    }
+    close() {
+        this.#transport.close();
+    }
+    #handleIncomingMessage = async (message) => {
+        this.#commandProcessor.processCommand(message);
+    };
+}
+exports.BidiServer = BidiServer;
+//# sourceMappingURL=BidiServer.js.map
+
+/***/ }),
+
+/***/ 7002:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CommandProcessor = void 0;
+const browsingContextProcessor_js_1 = __nccwpck_require__(1538);
+const protocol_js_1 = __nccwpck_require__(315);
+const OutgoindBidiMessage_js_1 = __nccwpck_require__(9848);
+const EventEmitter_js_1 = __nccwpck_require__(6111);
+class BidiNoOpParser {
+    parseGetRealmsParams(params) {
+        return params;
+    }
+    parseCallFunctionParams(params) {
+        return params;
+    }
+    parseEvaluateParams(params) {
+        return params;
+    }
+    parseDisownParams(params) {
+        return params;
+    }
+    parseSendCommandParams(params) {
+        return params;
+    }
+    parseGetSessionParams(params) {
+        return params;
+    }
+    parseNavigateParams(params) {
+        return params;
+    }
+    parseGetTreeParams(params) {
+        return params;
+    }
+    parseSubscribeParams(params) {
+        return params;
+    }
+    parseCreateParams(params) {
+        return params;
+    }
+    parseCloseParams(params) {
+        return params;
+    }
+}
+class CommandProcessor extends EventEmitter_js_1.EventEmitter {
+    #contextProcessor;
+    #eventManager;
+    #parser;
+    constructor(cdpConnection, eventManager, selfTargetId, parser = new BidiNoOpParser()) {
+        super();
+        this.#eventManager = eventManager;
+        this.#contextProcessor = new browsingContextProcessor_js_1.BrowsingContextProcessor(cdpConnection, selfTargetId, eventManager);
+        this.#parser = parser;
+    }
+    // noinspection JSMethodCanBeStatic,JSUnusedLocalSymbols
+    async #process_session_status() {
+        return { result: { ready: false, message: 'already connected' } };
+    }
+    async #process_session_subscribe(params, channel) {
+        await this.#eventManager.subscribe(params.events, params.contexts ?? [null], channel);
+        return { result: {} };
+    }
+    async #process_session_unsubscribe(params, channel) {
+        await this.#eventManager.unsubscribe(params.events, params.contexts ?? [null], channel);
+        return { result: {} };
+    }
+    async #processCommand(commandData) {
+        switch (commandData.method) {
+            case 'session.status':
+                return await this.#process_session_status();
+            case 'session.subscribe':
+                return await this.#process_session_subscribe(this.#parser.parseSubscribeParams(commandData.params), commandData.channel ?? null);
+            case 'session.unsubscribe':
+                return await this.#process_session_unsubscribe(this.#parser.parseSubscribeParams(commandData.params), commandData.channel ?? null);
+            case 'browsingContext.create':
+                return await this.#contextProcessor.process_browsingContext_create(this.#parser.parseCreateParams(commandData.params));
+            case 'browsingContext.close':
+                return await this.#contextProcessor.process_browsingContext_close(this.#parser.parseCloseParams(commandData.params));
+            case 'browsingContext.getTree':
+                return await this.#contextProcessor.process_browsingContext_getTree(this.#parser.parseGetTreeParams(commandData.params));
+            case 'browsingContext.navigate':
+                return await this.#contextProcessor.process_browsingContext_navigate(this.#parser.parseNavigateParams(commandData.params));
+            case 'script.getRealms':
+                return this.#contextProcessor.process_script_getRealms(this.#parser.parseGetRealmsParams(commandData.params));
+            case 'script.callFunction':
+                return await this.#contextProcessor.process_script_callFunction(this.#parser.parseCallFunctionParams(commandData.params));
+            case 'script.evaluate':
+                return await this.#contextProcessor.process_script_evaluate(this.#parser.parseEvaluateParams(commandData.params));
+            case 'script.disown':
+                return await this.#contextProcessor.process_script_disown(this.#parser.parseDisownParams(commandData.params));
+            case 'cdp.sendCommand':
+                return await this.#contextProcessor.process_cdp_sendCommand(this.#parser.parseSendCommandParams(commandData.params));
+            case 'cdp.getSession':
+                return await this.#contextProcessor.process_cdp_getSession(this.#parser.parseGetSessionParams(commandData.params));
+            default:
+                throw new protocol_js_1.Message.UnknownCommandException(`Unknown command '${commandData.method}'.`);
+        }
+    }
+    processCommand = async (command) => {
+        try {
+            const result = await this.#processCommand(command);
+            const response = {
+                id: command.id,
+                ...result,
+            };
+            this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(response, command.channel ?? null));
+        }
+        catch (e) {
+            if (e instanceof protocol_js_1.Message.ErrorResponseClass) {
+                const errorResponse = e;
+                this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(errorResponse.toErrorResponse(command.id), command.channel ?? null));
+            }
+            else {
+                const error = e;
+                console.error(error);
+                this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(new protocol_js_1.Message.UnknownException(error.message).toErrorResponse(command.id), command.channel ?? null));
+            }
+        }
+    };
+}
+exports.CommandProcessor = CommandProcessor;
+//# sourceMappingURL=CommandProcessor.js.map
+
+/***/ }),
+
+/***/ 9848:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OutgoingBidiMessage = void 0;
+class OutgoingBidiMessage {
+    #message;
+    #channel;
+    constructor(message, channel) {
+        this.#message = message;
+        this.#channel = channel;
+    }
+    static async createFromPromise(messagePromise, channel) {
+        const message = await messagePromise;
+        return new OutgoingBidiMessage(message, channel);
+    }
+    static createResolved(message, channel) {
+        return Promise.resolve(new OutgoingBidiMessage(message, channel));
+    }
+    get message() {
+        return this.#message;
+    }
+    get channel() {
+        return this.#channel;
+    }
+}
+exports.OutgoingBidiMessage = OutgoingBidiMessage;
+//# sourceMappingURL=OutgoindBidiMessage.js.map
+
+/***/ }),
+
+/***/ 1796:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.EventEmitter = exports.BidiServer = void 0;
+var BidiServer_js_1 = __nccwpck_require__(985);
+Object.defineProperty(exports, "BidiServer", ({ enumerable: true, get: function () { return BidiServer_js_1.BidiServer; } }));
+var EventEmitter_js_1 = __nccwpck_require__(6111);
+Object.defineProperty(exports, "EventEmitter", ({ enumerable: true, get: function () { return EventEmitter_js_1.EventEmitter; } }));
+//# sourceMappingURL=bidiMapper.js.map
+
+/***/ }),
+
+/***/ 177:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrowsingContextImpl = void 0;
+const protocol_js_1 = __nccwpck_require__(315);
+const deferred_js_1 = __nccwpck_require__(3343);
+const logManager_js_1 = __nccwpck_require__(3805);
+const realm_js_1 = __nccwpck_require__(3874);
+const browsingContextStorage_js_1 = __nccwpck_require__(7652);
+class BrowsingContextImpl {
+    #targetDefers = {
+        documentInitialized: new deferred_js_1.Deferred(),
+        targetUnblocked: new deferred_js_1.Deferred(),
+        Page: {
+            navigatedWithinDocument: new deferred_js_1.Deferred(),
+            lifecycleEvent: {
+                DOMContentLoaded: new deferred_js_1.Deferred(),
+                load: new deferred_js_1.Deferred(),
+            },
+        },
+    };
+    #contextId;
+    #parentId;
+    #cdpBrowserContextId;
+    #eventManager;
+    #children = new Map();
+    #url = 'about:blank';
+    #loaderId = null;
+    #cdpSessionId;
+    #cdpClient;
+    #maybeDefaultRealm;
+    get #defaultRealm() {
+        if (this.#maybeDefaultRealm === undefined) {
+            throw new Error(`No default realm for browsing context ${this.#contextId}`);
+        }
+        return this.#maybeDefaultRealm;
+    }
+    constructor(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager) {
+        this.#contextId = contextId;
+        this.#parentId = parentId;
+        this.#cdpClient = cdpClient;
+        this.#cdpBrowserContextId = cdpBrowserContextId;
+        this.#eventManager = eventManager;
+        this.#cdpSessionId = cdpSessionId;
+        this.#initListeners();
+        browsingContextStorage_js_1.BrowsingContextStorage.addContext(this);
+    }
+    static async createFrameContext(contextId, parentId, cdpClient, cdpSessionId, eventManager) {
+        const context = new BrowsingContextImpl(contextId, parentId, cdpClient, cdpSessionId, null, eventManager);
+        context.#targetDefers.targetUnblocked.resolve();
+        await eventManager.registerEvent({
+            method: protocol_js_1.BrowsingContext.EventNames.ContextCreatedEvent,
+            params: context.serializeToBidiValue(),
+        }, context.contextId);
+    }
+    static async createTargetContext(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager) {
+        const context = new BrowsingContextImpl(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager);
+        // No need in waiting for target to be unblocked.
+        // noinspection ES6MissingAwait
+        context.#unblockAttachedTarget();
+        await eventManager.registerEvent({
+            method: protocol_js_1.BrowsingContext.EventNames.ContextCreatedEvent,
+            params: context.serializeToBidiValue(),
+        }, context.contextId);
+    }
+    get cdpBrowserContextId() {
+        return this.#cdpBrowserContextId;
+    }
+    convertFrameToTargetContext(cdpClient, cdpSessionId) {
+        this.#updateConnection(cdpClient, cdpSessionId);
+        // No need in waiting for target to be unblocked.
+        // noinspection JSIgnoredPromiseFromCall
+        this.#unblockAttachedTarget();
+    }
+    async delete() {
+        await this.#removeChildContexts();
+        // Remove context from the parent.
+        if (this.parentId !== null) {
+            const parent = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(this.parentId);
+            parent.#children.delete(this.contextId);
+        }
+        await this.#eventManager.registerEvent({
+            method: protocol_js_1.BrowsingContext.EventNames.ContextDestroyedEvent,
+            params: this.serializeToBidiValue(),
+        }, this.contextId);
+        browsingContextStorage_js_1.BrowsingContextStorage.removeContext(this.contextId);
+    }
+    async #removeChildContexts() {
+        await Promise.all(this.children.map((child) => child.delete()));
+    }
+    #updateConnection(cdpClient, cdpSessionId) {
+        if (!this.#targetDefers.targetUnblocked.isFinished) {
+            this.#targetDefers.targetUnblocked.reject('OOPiF');
+        }
+        this.#targetDefers.targetUnblocked = new deferred_js_1.Deferred();
+        this.#cdpClient = cdpClient;
+        this.#cdpSessionId = cdpSessionId;
+        this.#initListeners();
+    }
+    async #unblockAttachedTarget() {
+        logManager_js_1.LogManager.create(this.#cdpClient, this.#cdpSessionId, this.#eventManager);
+        await this.#cdpClient.sendCommand('Runtime.enable');
+        await this.#cdpClient.sendCommand('Page.enable');
+        await this.#cdpClient.sendCommand('Page.setLifecycleEventsEnabled', {
+            enabled: true,
+        });
+        await this.#cdpClient.sendCommand('Target.setAutoAttach', {
+            autoAttach: true,
+            waitForDebuggerOnStart: true,
+            flatten: true,
+        });
+        await this.#cdpClient.sendCommand('Runtime.runIfWaitingForDebugger');
+        this.#targetDefers.targetUnblocked.resolve();
+    }
+    get contextId() {
+        return this.#contextId;
+    }
+    get parentId() {
+        return this.#parentId;
+    }
+    get cdpSessionId() {
+        return this.#cdpSessionId;
+    }
+    get children() {
+        return Array.from(this.#children.values());
+    }
+    get url() {
+        return this.#url;
+    }
+    addChild(child) {
+        this.#children.set(child.contextId, child);
+    }
+    async awaitLoaded() {
+        await this.#targetDefers.Page.lifecycleEvent.load;
+    }
+    async awaitUnblocked() {
+        await this.#targetDefers.targetUnblocked;
+    }
+    serializeToBidiValue(maxDepth = 0, addParentFiled = true) {
+        return {
+            context: this.#contextId,
+            url: this.url,
+            children: maxDepth > 0
+                ? this.children.map((c) => c.serializeToBidiValue(maxDepth - 1, false))
+                : null,
+            ...(addParentFiled ? { parent: this.#parentId } : {}),
+        };
+    }
+    #initListeners() {
+        this.#cdpClient.on('Target.targetInfoChanged', (params) => {
+            if (this.contextId !== params.targetInfo.targetId) {
+                return;
+            }
+            this.#url = params.targetInfo.url;
+        });
+        this.#cdpClient.on('Page.frameNavigated', async (params) => {
+            if (this.contextId !== params.frame.id) {
+                return;
+            }
+            this.#url = params.frame.url + (params.frame.urlFragment ?? '');
+            // At the point the page is initiated, all the nested iframes from the
+            // previous page are detached and realms are destroyed.
+            // Remove context's children.
+            await this.#removeChildContexts();
+            // Remove all the already created realms.
+            realm_js_1.Realm.clearBrowsingContext(this.contextId);
+        });
+        this.#cdpClient.on('Page.navigatedWithinDocument', (params) => {
+            if (this.contextId !== params.frameId) {
+                return;
+            }
+            this.#url = params.url;
+            this.#targetDefers.Page.navigatedWithinDocument.resolve(params);
+        });
+        this.#cdpClient.on('Page.lifecycleEvent', async (params) => {
+            if (this.contextId !== params.frameId) {
+                return;
+            }
+            if (params.name === 'init') {
+                this.#documentChanged(params.loaderId);
+                this.#targetDefers.documentInitialized.resolve();
+            }
+            if (params.name === 'commit') {
+                this.#loaderId = params.loaderId;
+                return;
+            }
+            if (params.loaderId !== this.#loaderId) {
+                return;
+            }
+            switch (params.name) {
+                case 'DOMContentLoaded':
+                    this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.resolve(params);
+                    await this.#eventManager.registerEvent({
+                        method: protocol_js_1.BrowsingContext.EventNames.DomContentLoadedEvent,
+                        params: {
+                            context: this.contextId,
+                            navigation: this.#loaderId,
+                            url: this.#url,
+                        },
+                    }, this.contextId);
+                    break;
+                case 'load':
+                    this.#targetDefers.Page.lifecycleEvent.load.resolve(params);
+                    await this.#eventManager.registerEvent({
+                        method: protocol_js_1.BrowsingContext.EventNames.LoadEvent,
+                        params: {
+                            context: this.contextId,
+                            navigation: this.#loaderId,
+                            url: this.#url,
+                        },
+                    }, this.contextId);
+                    break;
+            }
+        });
+        this.#cdpClient.on('Runtime.executionContextCreated', (params) => {
+            if (params.context.auxData.frameId !== this.contextId) {
+                return;
+            }
+            // Only this execution contexts are supported for now.
+            if (!['default', 'isolated'].includes(params.context.auxData.type)) {
+                return;
+            }
+            const realm = realm_js_1.Realm.create(params.context.uniqueId, this.contextId, params.context.id, this.#getOrigin(params), 
+            // TODO: differentiate types.
+            realm_js_1.RealmType.window, 
+            // Sandbox name for isolated world.
+            params.context.auxData.type === 'isolated'
+                ? params.context.name
+                : undefined, this.#cdpSessionId, this.#cdpClient);
+            if (params.context.auxData.isDefault) {
+                this.#maybeDefaultRealm = realm;
+            }
+        });
+        this.#cdpClient.on('Runtime.executionContextDestroyed', (params) => {
+            realm_js_1.Realm.findRealms({
+                cdpSessionId: this.#cdpSessionId,
+                executionContextId: params.executionContextId,
+            }).map((realm) => realm.delete());
+        });
+    }
+    #getOrigin(params) {
+        if (params.context.auxData.type === 'isolated') {
+            // Sandbox should have the same origin as the context itself, but in CDP
+            // it has an empty one.
+            return this.#defaultRealm.origin;
+        }
+        // https://html.spec.whatwg.org/multipage/origin.html#ascii-serialisation-of-an-origin
+        return ['://', ''].includes(params.context.origin)
+            ? 'null'
+            : params.context.origin;
+    }
+    #documentChanged(loaderId) {
+        if (this.#loaderId === loaderId) {
+            return;
+        }
+        if (!this.#targetDefers.documentInitialized.isFinished) {
+            this.#targetDefers.documentInitialized.reject('Document changed');
+        }
+        this.#targetDefers.documentInitialized = new deferred_js_1.Deferred();
+        if (!this.#targetDefers.Page.navigatedWithinDocument.isFinished) {
+            this.#targetDefers.Page.navigatedWithinDocument.reject('Document changed');
+        }
+        this.#targetDefers.Page.navigatedWithinDocument =
+            new deferred_js_1.Deferred();
+        if (!this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.isFinished) {
+            this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.reject('Document changed');
+        }
+        this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded =
+            new deferred_js_1.Deferred();
+        if (!this.#targetDefers.Page.lifecycleEvent.load.isFinished) {
+            this.#targetDefers.Page.lifecycleEvent.load.reject('Document changed');
+        }
+        this.#targetDefers.Page.lifecycleEvent.load =
+            new deferred_js_1.Deferred();
+        this.#loaderId = loaderId;
+    }
+    async navigate(url, wait) {
+        await this.#targetDefers.targetUnblocked;
+        // TODO: handle loading errors.
+        const cdpNavigateResult = await this.#cdpClient.sendCommand('Page.navigate', {
+            url,
+            frameId: this.contextId,
+        });
+        if (cdpNavigateResult.errorText) {
+            throw new protocol_js_1.Message.UnknownException(cdpNavigateResult.errorText);
+        }
+        if (cdpNavigateResult.loaderId !== undefined &&
+            cdpNavigateResult.loaderId !== this.#loaderId) {
+            this.#documentChanged(cdpNavigateResult.loaderId);
+        }
+        // Wait for `wait` condition.
+        switch (wait) {
+            case 'none':
+                break;
+            case 'interactive':
+                // No `loaderId` means same-document navigation.
+                if (cdpNavigateResult.loaderId === undefined) {
+                    await this.#targetDefers.Page.navigatedWithinDocument;
+                }
+                else {
+                    await this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded;
+                }
+                break;
+            case 'complete':
+                // No `loaderId` means same-document navigation.
+                if (cdpNavigateResult.loaderId === undefined) {
+                    await this.#targetDefers.Page.navigatedWithinDocument;
+                }
+                else {
+                    await this.#targetDefers.Page.lifecycleEvent.load;
+                }
+                break;
+            default:
+                throw new Error(`Not implemented wait '${wait}'`);
+        }
+        return {
+            result: {
+                navigation: cdpNavigateResult.loaderId || null,
+                url: url,
+            },
+        };
+    }
+    async getOrCreateSandbox(sandbox) {
+        if (sandbox === undefined || sandbox === '') {
+            return this.#defaultRealm;
+        }
+        let maybeSandboxes = realm_js_1.Realm.findRealms({
+            browsingContextId: this.contextId,
+            sandbox,
+        });
+        if (maybeSandboxes.length == 0) {
+            await this.#cdpClient.sendCommand('Page.createIsolatedWorld', {
+                frameId: this.contextId,
+                worldName: sandbox,
+            });
+            // `Runtime.executionContextCreated` should be emitted by the time the
+            // previous command is done.
+            maybeSandboxes = realm_js_1.Realm.findRealms({
+                browsingContextId: this.contextId,
+                sandbox,
+            });
+        }
+        if (maybeSandboxes.length !== 1) {
+            throw Error(`Sandbox ${sandbox} wasn't created.`);
+        }
+        return maybeSandboxes[0];
+    }
+}
+exports.BrowsingContextImpl = BrowsingContextImpl;
+//# sourceMappingURL=browsingContextImpl.js.map
+
+/***/ }),
+
+/***/ 1538:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrowsingContextProcessor = void 0;
+const log_js_1 = __nccwpck_require__(5598);
+const protocol_js_1 = __nccwpck_require__(315);
+const browsingContextImpl_js_1 = __nccwpck_require__(177);
+const realm_js_1 = __nccwpck_require__(3874);
+const browsingContextStorage_js_1 = __nccwpck_require__(7652);
+const logContext = (0, log_js_1.log)(log_js_1.LogType.browsingContexts);
+class BrowsingContextProcessor {
+    sessions = new Set();
+    #cdpConnection;
+    #selfTargetId;
+    #eventManager;
+    constructor(cdpConnection, selfTargetId, eventManager) {
+        this.#cdpConnection = cdpConnection;
+        this.#selfTargetId = selfTargetId;
+        this.#eventManager = eventManager;
+        this.#setBrowserClientEventListeners(this.#cdpConnection.browserClient());
+    }
+    #setBrowserClientEventListeners(browserClient) {
+        this.#setTargetEventListeners(browserClient);
+    }
+    #setTargetEventListeners(cdpClient) {
+        cdpClient.on('Target.attachedToTarget', async (params) => {
+            await this.#handleAttachedToTargetEvent(params, cdpClient);
+        });
+        cdpClient.on('Target.detachedFromTarget', async (params) => {
+            await BrowsingContextProcessor.#handleDetachedFromTargetEvent(params);
+        });
+    }
+    #setSessionEventListeners(sessionId) {
+        if (this.sessions.has(sessionId)) {
+            return;
+        }
+        this.sessions.add(sessionId);
+        const sessionCdpClient = this.#cdpConnection.getCdpClient(sessionId);
+        this.#setTargetEventListeners(sessionCdpClient);
+        sessionCdpClient.on('*', async (method, params) => {
+            await this.#eventManager.registerEvent({
+                method: protocol_js_1.CDP.EventNames.EventReceivedEvent,
+                params: {
+                    cdpMethod: method,
+                    cdpParams: params || {},
+                    cdpSession: sessionId,
+                },
+            }, null);
+        });
+        sessionCdpClient.on('Page.frameAttached', async (params) => {
+            await browsingContextImpl_js_1.BrowsingContextImpl.createFrameContext(params.frameId, params.parentFrameId, sessionCdpClient, sessionId, this.#eventManager);
+        });
+    }
+    async #handleAttachedToTargetEvent(params, parentSessionCdpClient) {
+        const { sessionId, targetInfo } = params;
+        let targetSessionCdpClient = this.#cdpConnection.getCdpClient(sessionId);
+        if (!this.#isValidTarget(targetInfo)) {
+            // DevTools or some other not supported by BiDi target.
+            await targetSessionCdpClient.sendCommand('Runtime.runIfWaitingForDebugger');
+            await parentSessionCdpClient.sendCommand('Target.detachFromTarget', params);
+            return;
+        }
+        logContext('AttachedToTarget event received: ' + JSON.stringify(params));
+        this.#setSessionEventListeners(sessionId);
+        if (browsingContextStorage_js_1.BrowsingContextStorage.hasKnownContext(targetInfo.targetId)) {
+            // OOPiF.
+            browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(targetInfo.targetId).convertFrameToTargetContext(targetSessionCdpClient, sessionId);
+        }
+        else {
+            await browsingContextImpl_js_1.BrowsingContextImpl.createTargetContext(targetInfo.targetId, null, targetSessionCdpClient, sessionId, params.targetInfo.browserContextId ?? null, this.#eventManager);
+        }
+    }
+    // { "method": "Target.detachedFromTarget",
+    //   "params": {
+    //     "sessionId": "7EFBFB2A4942A8989B3EADC561BC46E9",
+    //     "targetId": "19416886405CBA4E03DBB59FA67FF4E8" } }
+    static async #handleDetachedFromTargetEvent(params) {
+        // TODO: params.targetId is deprecated. Update this class to track using
+        // params.sessionId instead.
+        // https://github.com/GoogleChromeLabs/chromium-bidi/issues/60
+        const contextId = params.targetId;
+        await browsingContextStorage_js_1.BrowsingContextStorage.findContext(contextId)?.delete();
+    }
+    async process_browsingContext_getTree(params) {
+        const resultContexts = params.root === undefined
+            ? browsingContextStorage_js_1.BrowsingContextStorage.getTopLevelContexts()
+            : [browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(params.root)];
+        return {
+            result: {
+                contexts: resultContexts.map((c) => c.serializeToBidiValue(params.maxDepth ?? Number.MAX_VALUE)),
+            },
+        };
+    }
+    async process_browsingContext_create(params) {
+        const browserCdpClient = this.#cdpConnection.browserClient();
+        let referenceContext = undefined;
+        if (params.referenceContext !== undefined) {
+            referenceContext = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(params.referenceContext);
+            if (referenceContext.parentId !== null) {
+                throw new protocol_js_1.Message.InvalidArgumentException(`referenceContext should be a top-level context`);
+            }
+        }
+        const result = await browserCdpClient.sendCommand('Target.createTarget', {
+            url: 'about:blank',
+            newWindow: params.type === 'window',
+            ...(referenceContext?.cdpBrowserContextId
+                ? { browserContextId: referenceContext.cdpBrowserContextId }
+                : {}),
+        });
+        // Wait for the new tab to be loaded to avoid race conditions in the
+        // `browsingContext` events, when the `browsingContext.domContentLoaded` and
+        // `browsingContext.load` events from the initial `about:blank` navigation
+        // are emitted after the next navigation is started.
+        // Details: https://github.com/web-platform-tests/wpt/issues/35846
+        const contextId = result.targetId;
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(contextId);
+        await context.awaitLoaded();
+        return {
+            result: context.serializeToBidiValue(1),
+        };
+    }
+    async process_browsingContext_navigate(params) {
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(params.context);
+        return await context.navigate(params.url, params.wait !== undefined ? params.wait : 'none');
+    }
+    static async #getRealm(target) {
+        if ('realm' in target) {
+            return realm_js_1.Realm.getRealm({ realmId: target.realm });
+        }
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(target.context);
+        return await context.getOrCreateSandbox(target.sandbox);
+    }
+    async process_script_evaluate(params) {
+        const realm = await BrowsingContextProcessor.#getRealm(params.target);
+        return await realm.scriptEvaluate(params.expression, params.awaitPromise, params.resultOwnership ?? 'none');
+    }
+    process_script_getRealms(params) {
+        if (params.context !== undefined) {
+            // Make sure the context is known.
+            browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(params.context);
+        }
+        const realms = realm_js_1.Realm.findRealms({
+            browsingContextId: params.context,
+            type: params.type,
+        }).map((realm) => realm.toBiDi());
+        return { result: { realms } };
+    }
+    async process_script_callFunction(params) {
+        const realm = await BrowsingContextProcessor.#getRealm(params.target);
+        return await realm.callFunction(params.functionDeclaration, params.this || {
+            type: 'undefined',
+        }, // `this` is `undefined` by default.
+        params.arguments || [], // `arguments` is `[]` by default.
+        params.awaitPromise, params.resultOwnership ?? 'none');
+    }
+    async process_script_disown(params) {
+        const realm = await BrowsingContextProcessor.#getRealm(params.target);
+        await Promise.all(params.handles.map(async (h) => await realm.disown(h)));
+        return { result: {} };
+    }
+    async process_browsingContext_close(commandParams) {
+        const browserCdpClient = this.#cdpConnection.browserClient();
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(commandParams.context);
+        if (context.parentId !== null) {
+            throw new protocol_js_1.Message.InvalidArgumentException('Not a top-level browsing context cannot be closed.');
+        }
+        const detachedFromTargetPromise = new Promise(async (resolve) => {
+            const onContextDestroyed = (eventParams) => {
+                if (eventParams.targetId === commandParams.context) {
+                    browserCdpClient.off('Target.detachedFromTarget', onContextDestroyed);
+                    resolve();
+                }
+            };
+            browserCdpClient.on('Target.detachedFromTarget', onContextDestroyed);
+        });
+        await this.#cdpConnection
+            .browserClient()
+            .sendCommand('Target.closeTarget', {
+            targetId: commandParams.context,
+        });
+        // Sometimes CDP command finishes before `detachedFromTarget` event,
+        // sometimes after. Wait for the CDP command to be finished, and then wait
+        // for `detachedFromTarget` if it hasn't emitted.
+        await detachedFromTargetPromise;
+        return { result: {} };
+    }
+    #isValidTarget(target) {
+        if (target.targetId === this.#selfTargetId) {
+            return false;
+        }
+        return ['page', 'iframe'].includes(target.type);
+    }
+    async process_cdp_sendCommand(params) {
+        const client = params.cdpSession
+            ? this.#cdpConnection.getCdpClient(params.cdpSession)
+            : this.#cdpConnection.browserClient();
+        const sendCdpCommandResult = await client.sendCommand(params.cdpMethod, params.cdpParams);
+        return {
+            result: sendCdpCommandResult,
+            cdpSession: params.cdpSession,
+        };
+    }
+    async process_cdp_getSession(params) {
+        const context = params.context;
+        const sessionId = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(context).cdpSessionId;
+        if (sessionId === undefined) {
+            return { result: { cdpSession: null } };
+        }
+        return { result: { cdpSession: sessionId } };
+    }
+}
+exports.BrowsingContextProcessor = BrowsingContextProcessor;
+//# sourceMappingURL=browsingContextProcessor.js.map
+
+/***/ }),
+
+/***/ 7652:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BrowsingContextStorage = void 0;
+const protocol_js_1 = __nccwpck_require__(315);
+class BrowsingContextStorage {
+    static #contexts = new Map();
+    static getTopLevelContexts() {
+        return Array.from(BrowsingContextStorage.#contexts.values()).filter((c) => c.parentId === null);
+    }
+    static removeContext(contextId) {
+        BrowsingContextStorage.#contexts.delete(contextId);
+    }
+    static addContext(context) {
+        BrowsingContextStorage.#contexts.set(context.contextId, context);
+        if (context.parentId !== null) {
+            BrowsingContextStorage.getKnownContext(context.parentId).addChild(context);
+        }
+    }
+    static hasKnownContext(contextId) {
+        return BrowsingContextStorage.#contexts.has(contextId);
+    }
+    static findContext(contextId) {
+        return BrowsingContextStorage.#contexts.get(contextId);
+    }
+    static getKnownContext(contextId) {
+        const result = BrowsingContextStorage.findContext(contextId);
+        if (result === undefined) {
+            throw new protocol_js_1.Message.NoSuchFrameException(`Context ${contextId} not found`);
+        }
+        return result;
+    }
+}
+exports.BrowsingContextStorage = BrowsingContextStorage;
+//# sourceMappingURL=browsingContextStorage.js.map
+
+/***/ }),
+
+/***/ 8701:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.EventManager = void 0;
+const OutgoindBidiMessage_js_1 = __nccwpck_require__(9848);
+const SubscriptionManager_js_1 = __nccwpck_require__(9793);
+const idWrapper_js_1 = __nccwpck_require__(3018);
+const buffer_js_1 = __nccwpck_require__(5860);
+const browsingContextStorage_js_1 = __nccwpck_require__(7652);
+class EventWrapper extends idWrapper_js_1.IdWrapper {
+    #contextId;
+    #event;
+    constructor(event, contextId) {
+        super();
+        this.#contextId = contextId;
+        this.#event = event;
+    }
+    get contextId() {
+        return this.#contextId;
+    }
+    get event() {
+        return this.#event;
+    }
+}
+class EventManager {
+    /**
+     * Maps event name to a desired buffer length.
+     */
+    static #eventBufferLength = new Map([
+        ['log.entryAdded', 100],
+    ]);
+    /**
+     * Maps event name to a set of contexts where this event already happened.
+     * Needed for getting buffered events from all the contexts in case of
+     * subscripting to all contexts.
+     */
+    #eventToContextsMap = new Map();
+    /**
+     * Maps `eventName` + `browsingContext` to buffer. Used to get buffered events
+     * during subscription. Channel-agnostic.
+     */
+    #eventBuffers = new Map();
+    /**
+     * Maps `eventName` + `browsingContext` + `channel` to last sent event id.
+     * Used to avoid sending duplicated events when user
+     * subscribes -> unsubscribes -> subscribes.
+     */
+    #lastMessageSent = new Map();
+    #subscriptionManager;
+    #bidiServer;
+    constructor(bidiServer) {
+        this.#bidiServer = bidiServer;
+        this.#subscriptionManager = new SubscriptionManager_js_1.SubscriptionManager();
+    }
+    /**
+     * Returns consistent key to be used to access value maps.
+     */
+    static #getMapKey(eventName, browsingContext, channel = undefined) {
+        return JSON.stringify({ eventName, browsingContext, channel });
+    }
+    async registerEvent(event, contextId) {
+        await this.registerPromiseEvent(Promise.resolve(event), contextId, event.method);
+    }
+    async registerPromiseEvent(event, contextId, eventName) {
+        const eventWrapper = new EventWrapper(event, contextId);
+        const sortedChannels = this.#subscriptionManager.getChannelsSubscribedToEvent(eventName, contextId);
+        this.#bufferEvent(eventWrapper, eventName);
+        // Send events to channels in the subscription priority.
+        for (const channel of sortedChannels) {
+            this.#bidiServer.emitOutgoingMessage(OutgoindBidiMessage_js_1.OutgoingBidiMessage.createFromPromise(event, channel));
+            this.#markEventSent(eventWrapper, channel, eventName);
+        }
+    }
+    async subscribe(eventNames, contextIds, channel) {
+        for (let eventName of eventNames) {
+            for (let contextId of contextIds) {
+                if (contextId !== null &&
+                    !browsingContextStorage_js_1.BrowsingContextStorage.hasKnownContext(contextId)) {
+                    // Unknown context. Do nothing.
+                    continue;
+                }
+                this.#subscriptionManager.subscribe(eventName, contextId, channel);
+                for (let eventWrapper of this.#getBufferedEvents(eventName, contextId, channel)) {
+                    // The order of the events is important.
+                    this.#bidiServer.emitOutgoingMessage(OutgoindBidiMessage_js_1.OutgoingBidiMessage.createFromPromise(eventWrapper.event, channel));
+                    this.#markEventSent(eventWrapper, channel, eventName);
+                }
+            }
+        }
+    }
+    async unsubscribe(events, contextIds, channel) {
+        for (let event of events) {
+            for (let contextId of contextIds) {
+                this.#subscriptionManager.unsubscribe(event, contextId, channel);
+            }
+        }
+    }
+    /**
+     * If the event is buffer-able, put it in the buffer.
+     */
+    #bufferEvent(eventWrapper, eventName) {
+        if (!EventManager.#eventBufferLength.has(eventName)) {
+            // Do nothing if the event is no buffer-able.
+            return;
+        }
+        const bufferMapKey = EventManager.#getMapKey(eventName, eventWrapper.contextId);
+        if (!this.#eventBuffers.has(bufferMapKey)) {
+            this.#eventBuffers.set(bufferMapKey, new buffer_js_1.Buffer(EventManager.#eventBufferLength.get(eventName)));
+        }
+        this.#eventBuffers.get(bufferMapKey).add(eventWrapper);
+        // Add the context to the list of contexts having `eventName` events.
+        if (!this.#eventToContextsMap.has(eventName)) {
+            this.#eventToContextsMap.set(eventName, new Set());
+        }
+        this.#eventToContextsMap.get(eventName).add(eventWrapper.contextId);
+    }
+    /**
+     * If the event is buffer-able, mark it as sent to the given contextId and channel.
+     */
+    #markEventSent(eventWrapper, channel, eventName) {
+        if (!EventManager.#eventBufferLength.has(eventName)) {
+            // Do nothing if the event is no buffer-able.
+            return;
+        }
+        const lastSentMapKey = EventManager.#getMapKey(eventName, eventWrapper.contextId, channel);
+        this.#lastMessageSent.set(lastSentMapKey, Math.max(this.#lastMessageSent.get(lastSentMapKey) ?? 0, eventWrapper.id));
+    }
+    /**
+     * Returns events which are buffered and not yet sent to the given channel events.
+     */
+    #getBufferedEvents(eventName, contextId, channel) {
+        const bufferMapKey = EventManager.#getMapKey(eventName, contextId);
+        const lastSentMapKey = EventManager.#getMapKey(eventName, contextId, channel);
+        const lastSentMessageId = this.#lastMessageSent.get(lastSentMapKey) ?? -Infinity;
+        const result = this.#eventBuffers
+            .get(bufferMapKey)
+            ?.get()
+            .filter((wrapper) => wrapper.id > lastSentMessageId) ?? [];
+        if (contextId === null) {
+            // For global subscriptions, events buffered in each context should be sent back.
+            Array.from(this.#eventToContextsMap.get(eventName)?.keys() ?? [])
+                // Events without context are already in the result.
+                .filter((_contextId) => _contextId !== null)
+                .map((_contextId) => this.#getBufferedEvents(eventName, _contextId, channel))
+                .forEach((events) => result.push(...events));
+        }
+        return result.sort((e1, e2) => e1.id - e2.id);
+    }
+}
+exports.EventManager = EventManager;
+//# sourceMappingURL=EventManager.js.map
+
+/***/ }),
+
+/***/ 9793:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SubscriptionManager = void 0;
+class SubscriptionManager {
+    #subscriptionPriority = 0;
+    // BrowsingContext `null` means the event has subscription across all the
+    // browsing contexts.
+    // Channel `null` means no `channel` should be added.
+    #channelToContextToEventMap = new Map();
+    getChannelsSubscribedToEvent(eventMethod, contextId) {
+        const prioritiesAndChannels = Array.from(this.#channelToContextToEventMap.keys())
+            .map((channel) => ({
+            priority: this.#getEventSubscriptionPriorityForChannel(eventMethod, contextId, channel),
+            channel,
+        }))
+            .filter(({ priority }) => priority !== null);
+        // Sort channels by priority.
+        return prioritiesAndChannels
+            .sort((a, b) => a.priority - b.priority)
+            .map(({ channel }) => channel);
+    }
+    #getEventSubscriptionPriorityForChannel(eventMethod, contextId, channel) {
+        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
+        if (contextToEventMap === undefined) {
+            return null;
+        }
+        // Get all the subscription priorities.
+        let priorities = [
+            contextToEventMap.get(null)?.get(eventMethod),
+            contextToEventMap.get(contextId)?.get(eventMethod),
+        ].filter((p) => p !== undefined);
+        if (priorities.length === 0) {
+            // Not subscribed, return null.
+            return null;
+        }
+        // Return minimal priority.
+        return Math.min(...priorities);
+    }
+    subscribe(event, contextId, channel) {
+        if (!this.#channelToContextToEventMap.has(channel)) {
+            this.#channelToContextToEventMap.set(channel, new Map());
+        }
+        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
+        if (!contextToEventMap.has(contextId)) {
+            contextToEventMap.set(contextId, new Map());
+        }
+        const eventMap = contextToEventMap.get(contextId);
+        // Do not re-subscribe to events to keep the priority.
+        if (eventMap.has(event)) {
+            return;
+        }
+        eventMap.set(event, this.#subscriptionPriority++);
+    }
+    unsubscribe(event, contextId, channel) {
+        if (!this.#channelToContextToEventMap.has(channel)) {
+            return;
+        }
+        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
+        if (!contextToEventMap.has(contextId)) {
+            return;
+        }
+        const eventMap = contextToEventMap.get(contextId);
+        eventMap.delete(event);
+        // Clean up maps if empty.
+        if (eventMap.size === 0) {
+            contextToEventMap.delete(event);
+        }
+        if (contextToEventMap.size === 0) {
+            this.#channelToContextToEventMap.delete(channel);
+        }
+    }
+}
+exports.SubscriptionManager = SubscriptionManager;
+//# sourceMappingURL=SubscriptionManager.js.map
+
+/***/ }),
+
+/***/ 9283:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getRemoteValuesText = exports.logMessageFormatter = void 0;
+const specifiers = ['%s', '%d', '%i', '%f', '%o', '%O', '%c'];
+function isFormmatSpecifier(str) {
+    return specifiers.some((spec) => str.includes(spec));
+}
+/**
+ * @param args input remote values to be format printed
+ * @returns parsed text of the remote values in specific format
+ */
+function logMessageFormatter(args) {
+    let output = '';
+    const argFormat = args[0].value.toString();
+    const argValues = args.slice(1, undefined);
+    const tokens = argFormat.split(new RegExp(specifiers.map((spec) => '(' + spec + ')').join('|'), 'g'));
+    for (const token of tokens) {
+        if (token === undefined || token == '') {
+            continue;
+        }
+        if (isFormmatSpecifier(token)) {
+            const arg = argValues.shift();
+            // raise an exception when less value is provided
+            if (arg === undefined) {
+                throw new Error('Less value is provided: "' + getRemoteValuesText(args, false) + '"');
+            }
+            if (token === '%s') {
+                output += stringFromArg(arg);
+            }
+            else if (token === '%d' || token === '%i') {
+                if (arg.type === 'bigint' ||
+                    arg.type === 'number' ||
+                    arg.type === 'string') {
+                    output += parseInt(arg.value.toString(), 10);
+                }
+                else {
+                    output += 'NaN';
+                }
+            }
+            else if (token === '%f') {
+                if (arg.type === 'bigint' ||
+                    arg.type === 'number' ||
+                    arg.type === 'string') {
+                    output += parseFloat(arg.value.toString());
+                }
+                else {
+                    output += 'NaN';
+                }
+            }
+            else {
+                // %o, %O, %c
+                output += toJson(arg);
+            }
+        }
+        else {
+            output += token;
+        }
+    }
+    // raise an exception when more value is provided
+    if (argValues.length > 0) {
+        throw new Error('More value is provided: "' + getRemoteValuesText(args, false) + '"');
+    }
+    return output;
+}
+exports.logMessageFormatter = logMessageFormatter;
+/**
+ * @param arg input remote value to be parsed
+ * @returns parsed text of the remote value
+ *
+ * input: {"type": "number", "value": 1}
+ * output: 1
+ *
+ * input: {"type": "string", "value": "abc"}
+ * output: "abc"
+ *
+ * input: {"type": "object",  "value": [["id", {"type": "number", "value": 1}]]}
+ * output: '{"id": 1}'
+ *
+ * input: {"type": "object", "value": [["font-size", {"type": "string", "value": "20px"}]]}
+ * output: '{"font-size": "20px"}'
+ */
+function toJson(arg) {
+    // arg type validation
+    if (arg.type !== 'array' &&
+        arg.type !== 'bigint' &&
+        arg.type !== 'date' &&
+        arg.type !== 'number' &&
+        arg.type !== 'object' &&
+        arg.type !== 'string') {
+        return stringFromArg(arg);
+    }
+    if (arg.type === 'bigint') {
+        return arg.value.toString() + 'n';
+    }
+    if (arg.type === 'number') {
+        return arg.value.toString();
+    }
+    if (['date', 'string'].includes(arg.type)) {
+        return JSON.stringify(arg.value);
+    }
+    if (arg.type === 'object') {
+        return ('{' +
+            arg.value
+                .map((pair) => {
+                return `${JSON.stringify(pair[0])}:${toJson(pair[1])}`;
+            })
+                .join(',') +
+            '}');
+    }
+    if (arg.type === 'array') {
+        return '[' + arg.value.map((val) => toJson(val)).join(',') + ']';
+    }
+    throw Error('Invalid value type: ' + arg.toString());
+}
+function stringFromArg(arg) {
+    if (!arg.hasOwnProperty('value')) {
+        return arg.type;
+    }
+    switch (arg.type) {
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'bigint':
+            return String(arg.value);
+        case 'regexp':
+            return `/${arg.value.pattern}/${arg.value.flags}`;
+        case 'date':
+            return new Date(arg.value).toString();
+        case 'object':
+            return `Object(${arg.value?.length})`;
+        case 'array':
+            return `Array(${arg.value?.length})`;
+        case 'map':
+            return `Map(${arg.value.length})`;
+        case 'set':
+            return `Set(${arg.value.length})`;
+        case 'node':
+            return 'node';
+        default:
+            return arg.type;
+    }
+}
+function getRemoteValuesText(args, formatText) {
+    const arg = args[0];
+    if (!arg) {
+        return '';
+    }
+    // if args[0] is a format specifier, format the args as output
+    if (arg.type === 'string' &&
+        isFormmatSpecifier(arg.value.toString()) &&
+        formatText) {
+        return logMessageFormatter(args);
+    }
+    // if args[0] is not a format specifier, just join the args with \u0020
+    return args
+        .map((arg) => {
+        return stringFromArg(arg);
+    })
+        .join('\u0020');
+}
+exports.getRemoteValuesText = getRemoteValuesText;
+//# sourceMappingURL=logHelper.js.map
+
+/***/ }),
+
+/***/ 3805:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.LogManager = void 0;
+const protocol_js_1 = __nccwpck_require__(315);
+const logHelper_js_1 = __nccwpck_require__(9283);
+const realm_js_1 = __nccwpck_require__(3874);
+class LogManager {
+    #cdpClient;
+    #cdpSessionId;
+    #eventManager;
+    constructor(cdpClient, cdpSessionId, eventManager) {
+        this.#cdpSessionId = cdpSessionId;
+        this.#cdpClient = cdpClient;
+        this.#eventManager = eventManager;
+    }
+    static create(cdpClient, cdpSessionId, eventManager) {
+        const logManager = new LogManager(cdpClient, cdpSessionId, eventManager);
+        logManager.#initialize();
+        return logManager;
+    }
+    #initialize() {
+        this.#initializeEventListeners();
+    }
+    #initializeEventListeners() {
+        this.#initializeLogEntryAddedEventListener();
+    }
+    #initializeLogEntryAddedEventListener() {
+        this.#cdpClient.on('Runtime.consoleAPICalled', (params) => {
+            // Try to find realm by `cdpSessionId` and `executionContextId`,
+            // if provided.
+            const realm = realm_js_1.Realm.findRealm({
+                cdpSessionId: this.#cdpSessionId,
+                executionContextId: params.executionContextId,
+            });
+            const argsPromise = realm === undefined
+                ? Promise.resolve(params.args)
+                : // Properly serialize arguments if possible.
+                    Promise.all(params.args.map(async (arg) => {
+                        return realm.serializeCdpObject(arg, 'none');
+                    }));
+            // No need in waiting for the result, just register the event promise.
+            // noinspection JSIgnoredPromiseFromCall
+            this.#eventManager.registerPromiseEvent(argsPromise.then((args) => ({
+                method: protocol_js_1.Log.EventNames.LogEntryAddedEvent,
+                params: {
+                    level: LogManager.#getLogLevel(params.type),
+                    source: {
+                        realm: realm?.realmId ?? 'UNKNOWN',
+                        context: realm?.browsingContextId ?? 'UNKNOWN',
+                    },
+                    text: (0, logHelper_js_1.getRemoteValuesText)(args, true),
+                    timestamp: Math.round(params.timestamp),
+                    stackTrace: LogManager.#getBidiStackTrace(params.stackTrace),
+                    type: 'console',
+                    // Console method is `warn`, not `warning`.
+                    method: params.type === 'warning' ? 'warn' : params.type,
+                    args,
+                },
+            })), realm?.browsingContextId ?? 'UNKNOWN', protocol_js_1.Log.EventNames.LogEntryAddedEvent);
+        });
+        this.#cdpClient.on('Runtime.exceptionThrown', (params) => {
+            // Try to find realm by `cdpSessionId` and `executionContextId`,
+            // if provided.
+            const realm = realm_js_1.Realm.findRealm({
+                cdpSessionId: this.#cdpSessionId,
+                executionContextId: params.exceptionDetails.executionContextId,
+            });
+            // Try all the best to get the exception text.
+            const textPromise = (async () => {
+                if (!params.exceptionDetails.exception) {
+                    return params.exceptionDetails.text;
+                }
+                if (realm === undefined) {
+                    return JSON.stringify(params.exceptionDetails.exception);
+                }
+                return await realm.stringifyObject(params.exceptionDetails.exception);
+            })();
+            // No need in waiting for the result, just register the event promise.
+            // noinspection JSIgnoredPromiseFromCall
+            this.#eventManager.registerPromiseEvent(textPromise.then((text) => ({
+                method: protocol_js_1.Log.EventNames.LogEntryAddedEvent,
+                params: {
+                    level: 'error',
+                    source: {
+                        realm: realm?.realmId ?? 'UNKNOWN',
+                        context: realm?.browsingContextId ?? 'UNKNOWN',
+                    },
+                    text,
+                    timestamp: Math.round(params.timestamp),
+                    stackTrace: LogManager.#getBidiStackTrace(params.exceptionDetails.stackTrace),
+                    type: 'javascript',
+                },
+            })), realm?.browsingContextId ?? 'UNKNOWN', protocol_js_1.Log.EventNames.LogEntryAddedEvent);
+        });
+    }
+    static #getLogLevel(consoleApiType) {
+        if (['assert', 'error'].includes(consoleApiType)) {
+            return 'error';
+        }
+        if (['debug', 'trace'].includes(consoleApiType)) {
+            return 'debug';
+        }
+        if (['warn', 'warning'].includes(consoleApiType)) {
+            return 'warn';
+        }
+        return 'info';
+    }
+    // convert CDP StackTrace object to Bidi StackTrace object
+    static #getBidiStackTrace(cdpStackTrace) {
+        const stackFrames = cdpStackTrace?.callFrames.map((callFrame) => {
+            return {
+                columnNumber: callFrame.columnNumber,
+                functionName: callFrame.functionName,
+                lineNumber: callFrame.lineNumber,
+                url: callFrame.url,
+            };
+        });
+        return stackFrames ? { callFrames: stackFrames } : undefined;
+    }
+}
+exports.LogManager = LogManager;
+//# sourceMappingURL=logManager.js.map
+
+/***/ }),
+
+/***/ 3874:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Realm = exports.RealmType = void 0;
+const protocol_js_1 = __nccwpck_require__(315);
+const scriptEvaluator_js_1 = __nccwpck_require__(1376);
+const browsingContextStorage_js_1 = __nccwpck_require__(7652);
+var RealmType;
+(function (RealmType) {
+    RealmType["window"] = "window";
+})(RealmType = exports.RealmType || (exports.RealmType = {}));
+class Realm {
+    static #realmMap = new Map();
+    static create(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient) {
+        const realm = new Realm(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient);
+        Realm.#realmMap.set(realm.realmId, realm);
+        return realm;
+    }
+    static findRealms(filter = {}) {
+        return Array.from(Realm.#realmMap.values()).filter((realm) => {
+            if (filter.realmId !== undefined && filter.realmId !== realm.realmId) {
+                return false;
+            }
+            if (filter.browsingContextId !== undefined &&
+                filter.browsingContextId !== realm.browsingContextId) {
+                return false;
+            }
+            if (filter.executionContextId !== undefined &&
+                filter.executionContextId !== realm.executionContextId) {
+                return false;
+            }
+            if (filter.type !== undefined && filter.type !== realm.type) {
+                return false;
+            }
+            if (filter.sandbox !== undefined && filter.sandbox !== realm.#sandbox) {
+                return false;
+            }
+            if (filter.cdpSessionId !== undefined &&
+                filter.cdpSessionId !== realm.#cdpSessionId) {
+                return false;
+            }
+            return true;
+        });
+    }
+    static findRealm(filter) {
+        const maybeRealms = Realm.findRealms(filter);
+        if (maybeRealms.length !== 1) {
+            return undefined;
+        }
+        return maybeRealms[0];
+    }
+    static getRealm(filter) {
+        const maybeRealm = Realm.findRealm(filter);
+        if (maybeRealm === undefined) {
+            throw new protocol_js_1.Message.NoSuchFrameException(`Realm ${JSON.stringify(filter)} not found`);
+        }
+        return maybeRealm;
+    }
+    static clearBrowsingContext(browsingContextId) {
+        Realm.findRealms({ browsingContextId }).map((realm) => realm.delete());
+    }
+    delete() {
+        Realm.#realmMap.delete(this.realmId);
+        scriptEvaluator_js_1.ScriptEvaluator.realmDestroyed(this);
+    }
+    #realmId;
+    #browsingContextId;
+    #executionContextId;
+    #origin;
+    #type;
+    #sandbox;
+    #cdpSessionId;
+    #cdpClient;
+    constructor(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient) {
+        this.#realmId = realmId;
+        this.#browsingContextId = browsingContextId;
+        this.#executionContextId = executionContextId;
+        this.#sandbox = sandbox;
+        this.#origin = origin;
+        this.#type = type;
+        this.#cdpSessionId = cdpSessionId;
+        this.#cdpClient = cdpClient;
+    }
+    toBiDi() {
+        return {
+            realm: this.realmId,
+            origin: this.origin,
+            type: this.type,
+            context: this.browsingContextId,
+            ...(this.#sandbox !== undefined ? { sandbox: this.#sandbox } : {}),
+        };
+    }
+    get realmId() {
+        return this.#realmId;
+    }
+    get browsingContextId() {
+        return this.#browsingContextId;
+    }
+    get executionContextId() {
+        return this.#executionContextId;
+    }
+    get origin() {
+        return this.#origin;
+    }
+    get type() {
+        return this.#type;
+    }
+    get cdpClient() {
+        return this.#cdpClient;
+    }
+    async callFunction(functionDeclaration, _this, _arguments, awaitPromise, resultOwnership) {
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(this.browsingContextId);
+        await context.awaitUnblocked();
+        return {
+            result: await scriptEvaluator_js_1.ScriptEvaluator.callFunction(this, functionDeclaration, _this, _arguments, awaitPromise, resultOwnership),
+        };
+    }
+    async scriptEvaluate(expression, awaitPromise, resultOwnership) {
+        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(this.browsingContextId);
+        await context.awaitUnblocked();
+        return {
+            result: await scriptEvaluator_js_1.ScriptEvaluator.scriptEvaluate(this, expression, awaitPromise, resultOwnership),
+        };
+    }
+    async disown(handle) {
+        await scriptEvaluator_js_1.ScriptEvaluator.disown(this, handle);
+    }
+    /**
+     * Serializes a given CDP object into BiDi, keeping references in the
+     * target's `globalThis`.
+     * @param cdpObject CDP remote object to be serialized.
+     * @param resultOwnership indicates desired OwnershipModel.
+     */
+    async serializeCdpObject(cdpObject, resultOwnership) {
+        return await scriptEvaluator_js_1.ScriptEvaluator.serializeCdpObject(cdpObject, resultOwnership, this);
+    }
+    /**
+     * Gets the string representation of an object. This is equivalent to
+     * calling toString() on the object value.
+     * @param cdpObject CDP remote object representing an object.
+     * @param realm
+     * @returns string The stringified object.
+     */
+    async stringifyObject(cdpObject) {
+        return scriptEvaluator_js_1.ScriptEvaluator.stringifyObject(cdpObject, this);
+    }
+}
+exports.Realm = Realm;
+//# sourceMappingURL=realm.js.map
+
+/***/ }),
+
+/***/ 1376:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ScriptEvaluator = void 0;
+const protocol_js_1 = __nccwpck_require__(315);
+class ScriptEvaluator {
+    // As `script.evaluate` wraps call into serialization script, `lineNumber`
+    // should be adjusted.
+    static #evaluateStacktraceLineOffset = 0;
+    static #callFunctionStacktraceLineOffset = 1;
+    // Keeps track of `handle`s and their realms sent to client.
+    static #knownHandlesToRealm = new Map();
+    /**
+     * Serializes a given CDP object into BiDi, keeping references in the
+     * target's `globalThis`.
+     * @param cdpRemoteObject CDP remote object to be serialized.
+     * @param resultOwnership indicates desired OwnershipModel.
+     * @param realm
+     */
+    static async serializeCdpObject(cdpRemoteObject, resultOwnership, realm) {
+        const arg = this.#cdpRemoteObjectToCallArgument(cdpRemoteObject);
+        const cdpWebDriverValue = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+            functionDeclaration: String((obj) => obj),
+            awaitPromise: false,
+            arguments: [arg],
+            generateWebDriverValue: true,
+            executionContextId: realm.executionContextId,
+        });
+        return await this.#cdpToBidiValue(cdpWebDriverValue, realm, resultOwnership);
+    }
+    static #cdpRemoteObjectToCallArgument(cdpRemoteObject) {
+        if (cdpRemoteObject.objectId !== undefined) {
+            return { objectId: cdpRemoteObject.objectId };
+        }
+        if (cdpRemoteObject.unserializableValue !== undefined) {
+            return { unserializableValue: cdpRemoteObject.unserializableValue };
+        }
+        return { value: cdpRemoteObject.value };
+    }
+    /**
+     * Gets the string representation of an object. This is equivalent to
+     * calling toString() on the object value.
+     * @param cdpObject CDP remote object representing an object.
+     * @param realm
+     * @returns string The stringified object.
+     */
+    static async stringifyObject(cdpObject, realm) {
+        let stringifyResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+            functionDeclaration: String(function (obj) {
+                return String(obj);
+            }),
+            awaitPromise: false,
+            arguments: [cdpObject],
+            returnByValue: true,
+            executionContextId: realm.executionContextId,
+        });
+        return stringifyResult.result.value;
+    }
+    static async callFunction(realm, functionDeclaration, _this, _arguments, awaitPromise, resultOwnership) {
+        const callFunctionAndSerializeScript = `(...args)=>{ return _callFunction((\n${functionDeclaration}\n), args);
+      function _callFunction(f, args) {
+        const deserializedThis = args.shift();
+        const deserializedArgs = args;
+        return f.apply(deserializedThis, deserializedArgs);
+      }}`;
+        const thisAndArgumentsList = [
+            await this.#deserializeToCdpArg(_this, realm),
+        ];
+        thisAndArgumentsList.push(...(await Promise.all(_arguments.map(async (a) => {
+            return await this.#deserializeToCdpArg(a, realm);
+        }))));
+        let cdpCallFunctionResult;
+        try {
+            cdpCallFunctionResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+                functionDeclaration: callFunctionAndSerializeScript,
+                awaitPromise,
+                arguments: thisAndArgumentsList,
+                generateWebDriverValue: true,
+                executionContextId: realm.executionContextId,
+            });
+        }
+        catch (e) {
+            // Heuristic to determine if the problem is in the argument.
+            // The check can be done on the `deserialization` step, but this approach
+            // helps to save round-trips.
+            if (e.code === -32000 &&
+                [
+                    'Could not find object with given id',
+                    'Argument should belong to the same JavaScript world as target object',
+                ].includes(e.message)) {
+                throw new protocol_js_1.Message.InvalidArgumentException('Handle was not found.');
+            }
+            throw e;
+        }
+        if (cdpCallFunctionResult.exceptionDetails) {
+            // Serialize exception details.
+            return {
+                exceptionDetails: await this.#serializeCdpExceptionDetails(cdpCallFunctionResult.exceptionDetails, this.#callFunctionStacktraceLineOffset, resultOwnership, realm),
+                type: 'exception',
+                realm: realm.realmId,
+            };
+        }
+        return {
+            type: 'success',
+            result: await ScriptEvaluator.#cdpToBidiValue(cdpCallFunctionResult, realm, resultOwnership),
+            realm: realm.realmId,
+        };
+    }
+    static realmDestroyed(realm) {
+        return Array.from(this.#knownHandlesToRealm.entries())
+            .filter(([, r]) => r === realm.realmId)
+            .map(([h]) => this.#knownHandlesToRealm.delete(h));
+    }
+    static async disown(realm, handle) {
+        // Disowning an object from different realm does nothing.
+        if (ScriptEvaluator.#knownHandlesToRealm.get(handle) !== realm.realmId) {
+            return;
+        }
+        try {
+            await realm.cdpClient.sendCommand('Runtime.releaseObject', {
+                objectId: handle,
+            });
+        }
+        catch (e) {
+            // Heuristic to determine if the problem is in the unknown handler.
+            // Ignore the error if so.
+            if (!(e.code === -32000 && e.message === 'Invalid remote object id')) {
+                throw e;
+            }
+        }
+        this.#knownHandlesToRealm.delete(handle);
+    }
+    static async #serializeCdpExceptionDetails(cdpExceptionDetails, lineOffset, resultOwnership, realm) {
+        const callFrames = cdpExceptionDetails.stackTrace?.callFrames.map((frame) => ({
+            url: frame.url,
+            functionName: frame.functionName,
+            // As `script.evaluate` wraps call into serialization script, so
+            // `lineNumber` should be adjusted.
+            lineNumber: frame.lineNumber - lineOffset,
+            columnNumber: frame.columnNumber,
+        }));
+        const exception = await this.serializeCdpObject(
+        // Exception should always be there.
+        cdpExceptionDetails.exception, resultOwnership, realm);
+        const text = await this.stringifyObject(cdpExceptionDetails.exception, realm);
+        return {
+            exception,
+            columnNumber: cdpExceptionDetails.columnNumber,
+            // As `script.evaluate` wraps call into serialization script, so
+            // `lineNumber` should be adjusted.
+            lineNumber: cdpExceptionDetails.lineNumber - lineOffset,
+            stackTrace: {
+                callFrames: callFrames || [],
+            },
+            text: text || cdpExceptionDetails.text,
+        };
+    }
+    static async #cdpToBidiValue(cdpValue, realm, resultOwnership) {
+        // This relies on the CDP to implement proper BiDi serialization, except
+        // objectIds+handles.
+        const cdpWebDriverValue = cdpValue.result.webDriverValue;
+        if (!cdpValue.result.objectId) {
+            return cdpWebDriverValue;
+        }
+        const objectId = cdpValue.result.objectId;
+        const bidiValue = cdpWebDriverValue;
+        if (resultOwnership === 'root') {
+            bidiValue.handle = objectId;
+            // Remember all the handles sent to client.
+            this.#knownHandlesToRealm.set(objectId, realm.realmId);
+        }
+        else {
+            await realm.cdpClient.sendCommand('Runtime.releaseObject', { objectId });
+        }
+        return bidiValue;
+    }
+    static async scriptEvaluate(realm, expression, awaitPromise, resultOwnership) {
+        let cdpEvaluateResult = await realm.cdpClient.sendCommand('Runtime.evaluate', {
+            contextId: realm.executionContextId,
+            expression,
+            awaitPromise,
+            generateWebDriverValue: true,
+        });
+        if (cdpEvaluateResult.exceptionDetails) {
+            // Serialize exception details.
+            return {
+                exceptionDetails: await this.#serializeCdpExceptionDetails(cdpEvaluateResult.exceptionDetails, this.#evaluateStacktraceLineOffset, resultOwnership, realm),
+                type: 'exception',
+                realm: realm.realmId,
+            };
+        }
+        return {
+            type: 'success',
+            result: await ScriptEvaluator.#cdpToBidiValue(cdpEvaluateResult, realm, resultOwnership),
+            realm: realm.realmId,
+        };
+    }
+    static async #deserializeToCdpArg(argumentValue, realm) {
+        if ('handle' in argumentValue) {
+            return { objectId: argumentValue.handle };
+        }
+        switch (argumentValue.type) {
+            // Primitive Protocol Value
+            // https://w3c.github.io/webdriver-bidi/#data-types-protocolValue-primitiveProtocolValue
+            case 'undefined': {
+                return { unserializableValue: 'undefined' };
+            }
+            case 'null': {
+                return { unserializableValue: 'null' };
+            }
+            case 'string': {
+                return { value: argumentValue.value };
+            }
+            case 'number': {
+                if (argumentValue.value === 'NaN') {
+                    return { unserializableValue: 'NaN' };
+                }
+                else if (argumentValue.value === '-0') {
+                    return { unserializableValue: '-0' };
+                }
+                else if (argumentValue.value === '+Infinity') {
+                    return { unserializableValue: '+Infinity' };
+                }
+                else if (argumentValue.value === 'Infinity') {
+                    return { unserializableValue: 'Infinity' };
+                }
+                else if (argumentValue.value === '-Infinity') {
+                    return { unserializableValue: '-Infinity' };
+                }
+                else {
+                    return {
+                        value: argumentValue.value,
+                    };
+                }
+            }
+            case 'boolean': {
+                return { value: !!argumentValue.value };
+            }
+            case 'bigint': {
+                return {
+                    unserializableValue: `BigInt(${JSON.stringify(argumentValue.value)})`,
+                };
+            }
+            // Local Value
+            // https://w3c.github.io/webdriver-bidi/#data-types-protocolValue-LocalValue
+            case 'date': {
+                return {
+                    unserializableValue: `new Date(Date.parse(${JSON.stringify(argumentValue.value)}))`,
+                };
+            }
+            case 'regexp': {
+                return {
+                    unserializableValue: `new RegExp(${JSON.stringify(argumentValue.value.pattern)}, ${JSON.stringify(argumentValue.value.flags)})`,
+                };
+            }
+            case 'map': {
+                // TODO(sadym): if non of the nested keys and values has remote
+                //  reference, serialize to `unserializableValue` without CDP roundtrip.
+                const keyValueArray = await this.#flattenKeyValuePairs(argumentValue.value, realm);
+                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+                    functionDeclaration: String(function (...args) {
+                        const result = new Map();
+                        for (let i = 0; i < args.length; i += 2) {
+                            result.set(args[i], args[i + 1]);
+                        }
+                        return result;
+                    }),
+                    awaitPromise: false,
+                    arguments: keyValueArray,
+                    returnByValue: false,
+                    executionContextId: realm.executionContextId,
+                });
+                // TODO(sadym): dispose nested objects.
+                return { objectId: argEvalResult.result.objectId };
+            }
+            case 'object': {
+                // TODO(sadym): if non of the nested keys and values has remote
+                //  reference, serialize to `unserializableValue` without CDP roundtrip.
+                const keyValueArray = await this.#flattenKeyValuePairs(argumentValue.value, realm);
+                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+                    functionDeclaration: String(function (...args) {
+                        const result = {};
+                        for (let i = 0; i < args.length; i += 2) {
+                            // Key should be either `string`, `number`, or `symbol`.
+                            const key = args[i];
+                            result[key] = args[i + 1];
+                        }
+                        return result;
+                    }),
+                    awaitPromise: false,
+                    arguments: keyValueArray,
+                    returnByValue: false,
+                    executionContextId: realm.executionContextId,
+                });
+                // TODO(sadym): dispose nested objects.
+                return { objectId: argEvalResult.result.objectId };
+            }
+            case 'array': {
+                // TODO(sadym): if non of the nested items has remote reference,
+                //  serialize to `unserializableValue` without CDP roundtrip.
+                const args = await ScriptEvaluator.#flattenValueList(argumentValue.value, realm);
+                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+                    functionDeclaration: String(function (...args) {
+                        return args;
+                    }),
+                    awaitPromise: false,
+                    arguments: args,
+                    returnByValue: false,
+                    executionContextId: realm.executionContextId,
+                });
+                // TODO(sadym): dispose nested objects.
+                return { objectId: argEvalResult.result.objectId };
+            }
+            case 'set': {
+                // TODO(sadym): if non of the nested items has remote reference,
+                //  serialize to `unserializableValue` without CDP roundtrip.
+                const args = await this.#flattenValueList(argumentValue.value, realm);
+                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
+                    functionDeclaration: String(function (...args) {
+                        return new Set(args);
+                    }),
+                    awaitPromise: false,
+                    arguments: args,
+                    returnByValue: false,
+                    executionContextId: realm.executionContextId,
+                });
+                return { objectId: argEvalResult.result.objectId };
+            }
+            // TODO(sadym): dispose nested objects.
+            default:
+                throw new Error(`Value ${JSON.stringify(argumentValue)} is not deserializable.`);
+        }
+    }
+    static async #flattenKeyValuePairs(value, realm) {
+        const keyValueArray = [];
+        for (let pair of value) {
+            const key = pair[0];
+            const value = pair[1];
+            let keyArg, valueArg;
+            if (typeof key === 'string') {
+                // Key is a string.
+                keyArg = { value: key };
+            }
+            else {
+                // Key is a serialized value.
+                keyArg = await this.#deserializeToCdpArg(key, realm);
+            }
+            valueArg = await this.#deserializeToCdpArg(value, realm);
+            keyValueArray.push(keyArg);
+            keyValueArray.push(valueArg);
+        }
+        return keyValueArray;
+    }
+    static async #flattenValueList(list, realm) {
+        const result = [];
+        for (let value of list) {
+            result.push(await this.#deserializeToCdpArg(value, realm));
+        }
+        return result;
+    }
+}
+exports.ScriptEvaluator = ScriptEvaluator;
+//# sourceMappingURL=scriptEvaluator.js.map
+
+/***/ }),
+
+/***/ 315:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CDP = exports.Log = exports.BrowsingContext = exports.Message = void 0;
+var Message;
+(function (Message) {
+    class ErrorResponseClass {
+        constructor(error, message, stacktrace) {
+            this.error = error;
+            this.message = message;
+            this.stacktrace = stacktrace;
+        }
+        error;
+        message;
+        stacktrace;
+        toErrorResponse(commandId) {
+            return {
+                id: commandId,
+                error: this.error,
+                message: this.message,
+                stacktrace: this.stacktrace,
+            };
+        }
+    }
+    Message.ErrorResponseClass = ErrorResponseClass;
+    class UnknownException extends ErrorResponseClass {
+        constructor(message, stacktrace) {
+            super('unknown error', message, stacktrace);
+        }
+    }
+    Message.UnknownException = UnknownException;
+    class UnknownCommandException extends ErrorResponseClass {
+        constructor(message, stacktrace) {
+            super('unknown command', message, stacktrace);
+        }
+    }
+    Message.UnknownCommandException = UnknownCommandException;
+    class InvalidArgumentException extends ErrorResponseClass {
+        constructor(message, stacktrace) {
+            super('invalid argument', message, stacktrace);
+        }
+    }
+    Message.InvalidArgumentException = InvalidArgumentException;
+    class NoSuchFrameException extends ErrorResponseClass {
+        constructor(message) {
+            super('no such frame', message);
+        }
+    }
+    Message.NoSuchFrameException = NoSuchFrameException;
+})(Message = exports.Message || (exports.Message = {}));
+// https://w3c.github.io/webdriver-bidi/#module-browsingContext
+var BrowsingContext;
+(function (BrowsingContext) {
+    let EventNames;
+    (function (EventNames) {
+        EventNames["LoadEvent"] = "browsingContext.load";
+        EventNames["DomContentLoadedEvent"] = "browsingContext.domContentLoaded";
+        EventNames["ContextCreatedEvent"] = "browsingContext.contextCreated";
+        EventNames["ContextDestroyedEvent"] = "browsingContext.contextDestroyed";
+    })(EventNames = BrowsingContext.EventNames || (BrowsingContext.EventNames = {}));
+})(BrowsingContext = exports.BrowsingContext || (exports.BrowsingContext = {}));
+// https://w3c.github.io/webdriver-bidi/#module-log
+var Log;
+(function (Log) {
+    let EventNames;
+    (function (EventNames) {
+        EventNames["LogEntryAddedEvent"] = "log.entryAdded";
+    })(EventNames = Log.EventNames || (Log.EventNames = {}));
+})(Log = exports.Log || (exports.Log = {}));
+var CDP;
+(function (CDP) {
+    let EventNames;
+    (function (EventNames) {
+        EventNames["EventReceivedEvent"] = "cdp.eventReceived";
+    })(EventNames = CDP.EventNames || (CDP.EventNames = {}));
+})(CDP = exports.CDP || (exports.CDP = {}));
+//# sourceMappingURL=protocol.js.map
+
+/***/ }),
+
+/***/ 6111:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.EventEmitter = void 0;
+const mitt_1 = __importDefault(__nccwpck_require__(8578));
+class EventEmitter {
+    #emitter = (0, mitt_1.default)();
+    on(type, handler) {
+        this.#emitter.on(type, handler);
+        return this;
+    }
+    /**
+     * Like `on` but the listener will only be fired once and then it will be removed.
+     * @param event - the event you'd like to listen to
+     * @param handler - the handler function to run when the event occurs
+     * @returns `this` to enable you to chain method calls.
+     */
+    once(event, handler) {
+        const onceHandler = (eventData) => {
+            handler(eventData);
+            this.off(event, onceHandler);
+        };
+        return this.on(event, onceHandler);
+    }
+    off(type, handler) {
+        this.#emitter.off(type, handler);
+        return this;
+    }
+    /**
+     * Emits an event and call any associated listeners.
+     *
+     * @param event - the event you'd like to emit
+     * @param eventData - any data you'd like to emit with the event
+     * @returns `true` if there are any listeners, `false` if there are not.
+     */
+    emit(event, eventData) {
+        this.#emitter.emit(event, eventData);
+    }
+}
+exports.EventEmitter = EventEmitter;
+//# sourceMappingURL=EventEmitter.js.map
+
+/***/ }),
+
+/***/ 5860:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Buffer = void 0;
+/**
+ * Implements a FIFO buffer with a fixed size.
+ */
+class Buffer {
+    #capacity;
+    #entries = [];
+    #onItemRemoved;
+    /**
+     * @param capacity
+     * @param onItemRemoved optional delegate called for each removed element.
+     */
+    constructor(capacity, onItemRemoved = () => { }) {
+        this.#capacity = capacity;
+        this.#onItemRemoved = onItemRemoved;
+    }
+    get() {
+        return this.#entries;
+    }
+    add(value) {
+        this.#entries.push(value);
+        while (this.#entries.length > this.#capacity) {
+            const item = this.#entries.shift();
+            if (item !== undefined) {
+                this.#onItemRemoved(item);
+            }
+        }
+    }
+}
+exports.Buffer = Buffer;
+//# sourceMappingURL=buffer.js.map
+
+/***/ }),
+
+/***/ 3343:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Deferred = void 0;
+class Deferred {
+    #resolve = () => { };
+    #reject = () => { };
+    #promise;
+    #isFinished = false;
+    get isFinished() {
+        return this.#isFinished;
+    }
+    constructor() {
+        this.#promise = new Promise((resolve, reject) => {
+            this.#resolve = resolve;
+            this.#reject = reject;
+        });
+    }
+    then(onFulfilled, onRejected) {
+        return this.#promise.then(onFulfilled, onRejected);
+    }
+    catch(onRejected) {
+        return this.#promise.catch(onRejected);
+    }
+    resolve(value) {
+        this.#isFinished = true;
+        this.#resolve(value);
+    }
+    reject(reason) {
+        this.#isFinished = true;
+        this.#reject(reason);
+    }
+    finally(onFinally) {
+        return this.#promise.finally(onFinally);
+    }
+    [Symbol.toStringTag] = 'Promise';
+}
+exports.Deferred = Deferred;
+//# sourceMappingURL=deferred.js.map
+
+/***/ }),
+
+/***/ 3018:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.IdWrapper = void 0;
+/**
+ * Creates an object with a positive unique incrementing id.
+ */
+class IdWrapper {
+    static #counter = 0;
+    #id;
+    constructor() {
+        this.#id = ++IdWrapper.#counter;
+    }
+    get id() {
+        return this.#id;
+    }
+}
+exports.IdWrapper = IdWrapper;
+//# sourceMappingURL=idWrapper.js.map
+
+/***/ }),
+
+/***/ 5598:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2021 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.log = exports.LogType = void 0;
+var LogType;
+(function (LogType) {
+    LogType["system"] = "System";
+    LogType["bidi"] = "BiDi Messages";
+    LogType["browsingContexts"] = "Browsing Contexts";
+    LogType["cdp"] = "CDP";
+    LogType["commandParser"] = "Command parser";
+})(LogType = exports.LogType || (exports.LogType = {}));
+function log(logType) {
+    return (...messages) => {
+        console.log(logType, ...messages);
+        // Add messages to the Mapper Tab Page, if exists.
+        // Dynamic lookup to avoid circlular dependency.
+        if ('MapperTabPage' in globalThis) {
+            globalThis['MapperTabPage'].log(logType, ...messages);
+        }
+    };
+}
+exports.log = log;
+//# sourceMappingURL=log.js.map
+
+/***/ }),
+
+/***/ 9300:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ProcessingQueue = void 0;
+const log_js_1 = __nccwpck_require__(5598);
+/**
+ * Copyright 2022 Google LLC.
+ * Copyright (c) Microsoft Corporation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+const logSystem = (0, log_js_1.log)(log_js_1.LogType.system);
+class ProcessingQueue {
+    #queue = [];
+    #processor;
+    #catch;
+    // Flag to keep only 1 active processor.
+    #isProcessing = false;
+    constructor(processor, _catch = () => Promise.resolve()) {
+        this.#catch = _catch;
+        this.#processor = processor;
+    }
+    add(entry) {
+        this.#queue.push(entry);
+        // No need in waiting. Just initialise processor if needed.
+        // noinspection JSIgnoredPromiseFromCall
+        this.#processIfNeeded();
+    }
+    async #processIfNeeded() {
+        if (this.#isProcessing) {
+            return;
+        }
+        this.#isProcessing = true;
+        while (this.#queue.length > 0) {
+            const entryPromise = this.#queue.shift();
+            if (entryPromise !== undefined) {
+                await entryPromise
+                    .then((entry) => this.#processor(entry))
+                    .catch((e) => {
+                    logSystem('Event was not processed:' + e);
+                    this.#catch(e);
+                })
+                    .finally();
+            }
+        }
+        this.#isProcessing = false;
+    }
+}
+exports.ProcessingQueue = ProcessingQueue;
+//# sourceMappingURL=processingQueue.js.map
+
+/***/ }),
+
 /***/ 6891:
 /***/ ((module) => {
 
@@ -7950,6 +10509,15 @@ function globUnescape (s) {
 function regExpEscape (s) {
   return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
 }
+
+
+/***/ }),
+
+/***/ 8578:
+/***/ ((module) => {
+
+module.exports=function(n){return{all:n=n||new Map,on:function(e,t){var i=n.get(e);i?i.push(t):n.set(e,[t])},off:function(e,t){var i=n.get(e);i&&(t?i.splice(i.indexOf(t)>>>0,1):n.set(e,[]))},emit:function(e,t){var i=n.get(e);i&&i.slice().map(function(n){n(t)}),(i=n.get("*"))&&i.slice().map(function(n){n(e,t)})}}};
+//# sourceMappingURL=mitt.js.map
 
 
 /***/ }),
@@ -25671,6 +28239,354 @@ exports.BrowserContext = BrowserContext;
 
 /***/ }),
 
+/***/ 3839:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+/**
+ * Copyright 2023 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ElementHandle = void 0;
+const JSHandle_js_1 = __nccwpck_require__(882);
+/**
+ * ElementHandle represents an in-page DOM element.
+ *
+ * @remarks
+ * ElementHandles can be created with the {@link Page.$} method.
+ *
+ * ```ts
+ * import puppeteer from 'puppeteer';
+ *
+ * (async () => {
+ *   const browser = await puppeteer.launch();
+ *   const page = await browser.newPage();
+ *   await page.goto('https://example.com');
+ *   const hrefElement = await page.$('a');
+ *   await hrefElement.click();
+ *   // ...
+ * })();
+ * ```
+ *
+ * ElementHandle prevents the DOM element from being garbage-collected unless the
+ * handle is {@link JSHandle.dispose | disposed}. ElementHandles are auto-disposed
+ * when their origin frame gets navigated.
+ *
+ * ElementHandle instances can be used as arguments in {@link Page.$eval} and
+ * {@link Page.evaluate} methods.
+ *
+ * If you're using TypeScript, ElementHandle takes a generic argument that
+ * denotes the type of element the handle is holding within. For example, if you
+ * have a handle to a `<select>` element, you can type it as
+ * `ElementHandle<HTMLSelectElement>` and you get some nicer type checks.
+ *
+ * @public
+ */
+class ElementHandle extends JSHandle_js_1.JSHandle {
+    /**
+     * @internal
+     */
+    constructor() {
+        super();
+    }
+    /**
+     * @internal
+     */
+    executionContext() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * @internal
+     */
+    get client() {
+        throw new Error('Not implemented');
+    }
+    get frame() {
+        throw new Error('Not implemented');
+    }
+    async $() {
+        throw new Error('Not implemented');
+    }
+    async $$() {
+        throw new Error('Not implemented');
+    }
+    async $eval() {
+        throw new Error('Not implemented');
+    }
+    async $$eval() {
+        throw new Error('Not implemented');
+    }
+    async $x() {
+        throw new Error('Not implemented');
+    }
+    async waitForSelector() {
+        throw new Error('Not implemented');
+    }
+    async waitForXPath() {
+        throw new Error('Not implemented');
+    }
+    async toElement() {
+        throw new Error('Not implemented');
+    }
+    asElement() {
+        return this;
+    }
+    /**
+     * Resolves to the content frame for element handles referencing
+     * iframe nodes, or null otherwise
+     */
+    async contentFrame() {
+        throw new Error('Not implemented');
+    }
+    async clickablePoint() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * This method scrolls element into view if needed, and then
+     * uses {@link Page.mouse} to hover over the center of the element.
+     * If the element is detached from DOM, the method throws an error.
+     */
+    async hover() {
+        throw new Error('Not implemented');
+    }
+    async click() {
+        throw new Error('Not implemented');
+    }
+    async drag() {
+        throw new Error('Not implemented');
+    }
+    async dragEnter() {
+        throw new Error('Not implemented');
+    }
+    async dragOver() {
+        throw new Error('Not implemented');
+    }
+    async drop() {
+        throw new Error('Not implemented');
+    }
+    async dragAndDrop() {
+        throw new Error('Not implemented');
+    }
+    async select() {
+        throw new Error('Not implemented');
+    }
+    async uploadFile() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * This method scrolls element into view if needed, and then uses
+     * {@link Touchscreen.tap} to tap in the center of the element.
+     * If the element is detached from DOM, the method throws an error.
+     */
+    async tap() {
+        throw new Error('Not implemented');
+    }
+    async touchStart() {
+        throw new Error('Not implemented');
+    }
+    async touchMove() {
+        throw new Error('Not implemented');
+    }
+    async touchEnd() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * Calls {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus | focus} on the element.
+     */
+    async focus() {
+        throw new Error('Not implemented');
+    }
+    async type() {
+        throw new Error('Not implemented');
+    }
+    async press() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * This method returns the bounding box of the element (relative to the main frame),
+     * or `null` if the element is not visible.
+     */
+    async boundingBox() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * This method returns boxes of the element, or `null` if the element is not visible.
+     *
+     * @remarks
+     *
+     * Boxes are represented as an array of points;
+     * Each Point is an object `{x, y}`. Box points are sorted clock-wise.
+     */
+    async boxModel() {
+        throw new Error('Not implemented');
+    }
+    async screenshot() {
+        throw new Error('Not implemented');
+    }
+    async isIntersectingViewport() {
+        throw new Error('Not implemented');
+    }
+}
+exports.ElementHandle = ElementHandle;
+//# sourceMappingURL=ElementHandle.js.map
+
+/***/ }),
+
+/***/ 882:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Copyright 2023 Google Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.JSHandle = void 0;
+/**
+ * Represents a reference to a JavaScript object. Instances can be created using
+ * {@link Page.evaluateHandle}.
+ *
+ * Handles prevent the referenced JavaScript object from being garbage-collected
+ * unless the handle is purposely {@link JSHandle.dispose | disposed}. JSHandles
+ * are auto-disposed when their associated frame is navigated away or the parent
+ * context gets destroyed.
+ *
+ * Handles can be used as arguments for any evaluation function such as
+ * {@link Page.$eval}, {@link Page.evaluate}, and {@link Page.evaluateHandle}.
+ * They are resolved to their referenced object.
+ *
+ * @example
+ *
+ * ```ts
+ * const windowHandle = await page.evaluateHandle(() => window);
+ * ```
+ *
+ * @public
+ */
+class JSHandle {
+    /**
+     * @internal
+     */
+    constructor() { }
+    /**
+     * @internal
+     */
+    get disposed() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * @internal
+     */
+    executionContext() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * @internal
+     */
+    get client() {
+        throw new Error('Not implemented');
+    }
+    async evaluate() {
+        throw new Error('Not implemented');
+    }
+    async evaluateHandle() {
+        throw new Error('Not implemented');
+    }
+    async getProperty() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * Gets a map of handles representing the properties of the current handle.
+     *
+     * @example
+     *
+     * ```ts
+     * const listHandle = await page.evaluateHandle(() => document.body.children);
+     * const properties = await listHandle.getProperties();
+     * const children = [];
+     * for (const property of properties.values()) {
+     *   const element = property.asElement();
+     *   if (element) {
+     *     children.push(element);
+     *   }
+     * }
+     * children; // holds elementHandles to all children of document.body
+     * ```
+     */
+    async getProperties() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * @returns A vanilla object representing the serializable portions of the
+     * referenced object.
+     * @throws Throws if the object cannot be serialized due to circularity.
+     *
+     * @remarks
+     * If the object has a `toJSON` function, it **will not** be called.
+     */
+    async jsonValue() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * @returns Either `null` or the handle itself if the handle is an
+     * instance of {@link ElementHandle}.
+     */
+    asElement() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * Releases the object referenced by the handle for garbage collection.
+     */
+    async dispose() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * Returns a string representation of the JSHandle.
+     *
+     * @remarks
+     * Useful during debugging.
+     */
+    toString() {
+        throw new Error('Not implemented');
+    }
+    /**
+     * Provides access to the
+     * [Protocol.Runtime.RemoteObject](https://chromedevtools.github.io/devtools-protocol/tot/Runtime/#type-RemoteObject)
+     */
+    remoteObject() {
+        throw new Error('Not implemented');
+    }
+}
+exports.JSHandle = JSHandle;
+//# sourceMappingURL=JSHandle.js.map
+
+/***/ }),
+
 /***/ 2194:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -26252,6 +29168,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__nccwpck_require__(3469), exports);
 __exportStar(__nccwpck_require__(2185), exports);
 __exportStar(__nccwpck_require__(2194), exports);
+__exportStar(__nccwpck_require__(882), exports);
+__exportStar(__nccwpck_require__(3839), exports);
 //# sourceMappingURL=api.js.map
 
 /***/ }),
@@ -27299,7 +30217,7 @@ class CDPBrowserContext extends BrowserContext_js_1.BrowserContext {
      * ```
      *
      * @param predicate - A function to be run for every target
-     * @param options - An object of options. Accepts a timout,
+     * @param options - An object of options. Accepts a timeout,
      * which is the maximum wait time in milliseconds.
      * Pass `0` to disable the timeout. Defaults to 30 seconds.
      * @returns Promise which resolves to the first target found
@@ -30620,114 +33538,98 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _ElementHandle_instances, _ElementHandle_frame, _ElementHandle_frameManager_get, _ElementHandle_page_get, _ElementHandle_scrollIntoViewIfNeeded, _ElementHandle_getOOPIFOffsets, _ElementHandle_getBoxModel, _ElementHandle_fromProtocolQuad, _ElementHandle_intersectQuadWithViewport;
+var _CDPElementHandle_instances, _CDPElementHandle_disposed, _CDPElementHandle_frame, _CDPElementHandle_context, _CDPElementHandle_remoteObject, _CDPElementHandle_frameManager_get, _CDPElementHandle_page_get, _CDPElementHandle_scrollIntoViewIfNeeded, _CDPElementHandle_getOOPIFOffsets, _CDPElementHandle_getBoxModel, _CDPElementHandle_fromProtocolQuad, _CDPElementHandle_intersectQuadWithViewport;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.ElementHandle = void 0;
+exports.CDPElementHandle = void 0;
 const assert_js_1 = __nccwpck_require__(7729);
-const JSHandle_js_1 = __nccwpck_require__(2045);
 const QueryHandler_js_1 = __nccwpck_require__(3200);
 const util_js_1 = __nccwpck_require__(8274);
+const ElementHandle_js_1 = __nccwpck_require__(3839);
 const applyOffsetsToQuad = (quad, offsetX, offsetY) => {
     return quad.map(part => {
         return { x: part.x + offsetX, y: part.y + offsetY };
     });
 };
 /**
- * ElementHandle represents an in-page DOM element.
+ * The CDPElementHandle extends ElementHandle now to keep compatibility
+ * with `instanceof` because of that we need to have methods for
+ * CDPJSHandle to in this implementation as well.
  *
- * @remarks
- * ElementHandles can be created with the {@link Page.$} method.
- *
- * ```ts
- * import puppeteer from 'puppeteer';
- *
- * (async () => {
- *   const browser = await puppeteer.launch();
- *   const page = await browser.newPage();
- *   await page.goto('https://example.com');
- *   const hrefElement = await page.$('a');
- *   await hrefElement.click();
- *   // ...
- * })();
- * ```
- *
- * ElementHandle prevents the DOM element from being garbage-collected unless the
- * handle is {@link JSHandle.dispose | disposed}. ElementHandles are auto-disposed
- * when their origin frame gets navigated.
- *
- * ElementHandle instances can be used as arguments in {@link Page.$eval} and
- * {@link Page.evaluate} methods.
- *
- * If you're using TypeScript, ElementHandle takes a generic argument that
- * denotes the type of element the handle is holding within. For example, if you
- * have a handle to a `<select>` element, you can type it as
- * `ElementHandle<HTMLSelectElement>` and you get some nicer type checks.
- *
- * @public
+ * @internal
  */
-class ElementHandle extends JSHandle_js_1.JSHandle {
+class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
+    constructor(context, remoteObject, frame) {
+        super();
+        _CDPElementHandle_instances.add(this);
+        _CDPElementHandle_disposed.set(this, false);
+        _CDPElementHandle_frame.set(this, void 0);
+        _CDPElementHandle_context.set(this, void 0);
+        _CDPElementHandle_remoteObject.set(this, void 0);
+        __classPrivateFieldSet(this, _CDPElementHandle_context, context, "f");
+        __classPrivateFieldSet(this, _CDPElementHandle_remoteObject, remoteObject, "f");
+        __classPrivateFieldSet(this, _CDPElementHandle_frame, frame, "f");
+    }
     /**
      * @internal
      */
-    constructor(context, remoteObject, frame) {
-        super(context, remoteObject);
-        _ElementHandle_instances.add(this);
-        _ElementHandle_frame.set(this, void 0);
-        __classPrivateFieldSet(this, _ElementHandle_frame, frame, "f");
-    }
-    get frame() {
-        return __classPrivateFieldGet(this, _ElementHandle_frame, "f");
+    executionContext() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_context, "f");
     }
     /**
-     * Queries the current element for an element matching the given selector.
-     *
-     * @param selector - The selector to query for.
-     * @returns A {@link ElementHandle | element handle} to the first element
-     * matching the given selector. Otherwise, `null`.
+     * @internal
      */
+    get client() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_context, "f")._client;
+    }
+    remoteObject() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f");
+    }
+    async evaluate(pageFunction, ...args) {
+        return this.executionContext().evaluate(pageFunction, this, ...args);
+    }
+    evaluateHandle(pageFunction, ...args) {
+        return this.executionContext().evaluateHandle(pageFunction, this, ...args);
+    }
+    get frame() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f");
+    }
+    get disposed() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_disposed, "f");
+    }
+    async getProperty(propertyName) {
+        return this.evaluateHandle((object, propertyName) => {
+            return object[propertyName];
+        }, propertyName);
+    }
+    async jsonValue() {
+        if (!__classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f").objectId) {
+            return (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f"));
+        }
+        const value = await this.evaluate(object => {
+            return object;
+        });
+        if (value === undefined) {
+            throw new Error('Could not serialize referenced object');
+        }
+        return value;
+    }
+    toString() {
+        if (!__classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f").objectId) {
+            return 'JSHandle:' + (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f"));
+        }
+        const type = __classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f").subtype || __classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f").type;
+        return 'JSHandle@' + type;
+    }
     async $(selector) {
         const { updatedSelector, queryHandler } = (0, QueryHandler_js_1.getQueryHandlerAndSelector)(selector);
         (0, assert_js_1.assert)(queryHandler.queryOne, 'Cannot handle queries for a single element with the given selector');
         return (await queryHandler.queryOne(this, updatedSelector));
     }
-    /**
-     * Queries the current element for all elements matching the given selector.
-     *
-     * @param selector - The selector to query for.
-     * @returns An array of {@link ElementHandle | element handles} that point to
-     * elements matching the given selector.
-     */
     async $$(selector) {
         const { updatedSelector, queryHandler } = (0, QueryHandler_js_1.getQueryHandlerAndSelector)(selector);
         (0, assert_js_1.assert)(queryHandler.queryAll, 'Cannot handle queries for a multiple element with the given selector');
         return (await queryHandler.queryAll(this, updatedSelector));
     }
-    /**
-     * Runs the given function on the first element matching the given selector in
-     * the current element.
-     *
-     * If the given function returns a promise, then this method will wait till
-     * the promise resolves.
-     *
-     * @example
-     *
-     * ```ts
-     * const tweetHandle = await page.$('.tweet');
-     * expect(await tweetHandle.$eval('.like', node => node.innerText)).toBe(
-     *   '100'
-     * );
-     * expect(await tweetHandle.$eval('.retweets', node => node.innerText)).toBe(
-     *   '10'
-     * );
-     * ```
-     *
-     * @param selector - The selector to query for.
-     * @param pageFunction - The function to be evaluated in this element's page's
-     * context. The first element matching the selector will be passed in as the
-     * first argument.
-     * @param args - Additional arguments to pass to `pageFunction`.
-     * @returns A promise to the result of the function.
-     */
     async $eval(selector, pageFunction, ...args) {
         const elementHandle = await this.$(selector);
         if (!elementHandle) {
@@ -30737,39 +33639,6 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         await elementHandle.dispose();
         return result;
     }
-    /**
-     * Runs the given function on an array of elements matching the given selector
-     * in the current element.
-     *
-     * If the given function returns a promise, then this method will wait till
-     * the promise resolves.
-     *
-     * @example
-     * HTML:
-     *
-     * ```html
-     * <div class="feed">
-     *   <div class="tweet">Hello!</div>
-     *   <div class="tweet">Hi!</div>
-     * </div>
-     * ```
-     *
-     * JavaScript:
-     *
-     * ```js
-     * const feedHandle = await page.$('.feed');
-     * expect(
-     *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
-     * ).toEqual(['Hello!', 'Hi!']);
-     * ```
-     *
-     * @param selector - The selector to query for.
-     * @param pageFunction - The function to be evaluated in the element's page's
-     * context. An array of elements matching the given selector will be passed to
-     * the function as its first argument.
-     * @param args - Additional arguments to pass to `pageFunction`.
-     * @returns A promise to the result of the function.
-     */
     async $$eval(selector, pageFunction, ...args) {
         const { updatedSelector, queryHandler } = (0, QueryHandler_js_1.getQueryHandlerAndSelector)(selector);
         (0, assert_js_1.assert)(queryHandler.queryAll, 'Cannot handle queries for a multiple element with the given selector');
@@ -30786,152 +33655,23 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         await elements.dispose();
         return result;
     }
-    /**
-     * @deprecated Use {@link ElementHandle.$$} with the `xpath` prefix.
-     *
-     * Example: `await elementHandle.$$('xpath/' + xpathExpression)`
-     *
-     * The method evaluates the XPath expression relative to the elementHandle.
-     * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-     * automatically.
-     *
-     * If there are no such elements, the method will resolve to an empty array.
-     * @param expression - Expression to {@link https://developer.mozilla.org/en-US/docs/Web/API/Document/evaluate | evaluate}
-     */
     async $x(expression) {
         if (expression.startsWith('//')) {
             expression = `.${expression}`;
         }
         return this.$$(`xpath/${expression}`);
     }
-    /**
-     * Wait for an element matching the given selector to appear in the current
-     * element.
-     *
-     * Unlike {@link Frame.waitForSelector}, this method does not work across
-     * navigations or if the element is detached from DOM.
-     *
-     * @example
-     *
-     * ```ts
-     * import puppeteer from 'puppeteer';
-     *
-     * (async () => {
-     *   const browser = await puppeteer.launch();
-     *   const page = await browser.newPage();
-     *   let currentURL;
-     *   page
-     *     .mainFrame()
-     *     .waitForSelector('img')
-     *     .then(() => console.log('First URL with image: ' + currentURL));
-     *
-     *   for (currentURL of [
-     *     'https://example.com',
-     *     'https://google.com',
-     *     'https://bbc.com',
-     *   ]) {
-     *     await page.goto(currentURL);
-     *   }
-     *   await browser.close();
-     * })();
-     * ```
-     *
-     * @param selector - The selector to query and wait for.
-     * @param options - Options for customizing waiting behavior.
-     * @returns An element matching the given selector.
-     * @throws Throws if an element matching the given selector doesn't appear.
-     */
     async waitForSelector(selector, options = {}) {
         const { updatedSelector, queryHandler } = (0, QueryHandler_js_1.getQueryHandlerAndSelector)(selector);
         (0, assert_js_1.assert)(queryHandler.waitFor, 'Query handler does not support waiting');
         return (await queryHandler.waitFor(this, updatedSelector, options));
     }
-    /**
-     * @deprecated Use {@link ElementHandle.waitForSelector} with the `xpath`
-     * prefix.
-     *
-     * Example: `await elementHandle.waitForSelector('xpath/' + xpathExpression)`
-     *
-     * The method evaluates the XPath expression relative to the elementHandle.
-     *
-     * Wait for the `xpath` within the element. If at the moment of calling the
-     * method the `xpath` already exists, the method will return immediately. If
-     * the `xpath` doesn't appear after the `timeout` milliseconds of waiting, the
-     * function will throw.
-     *
-     * If `xpath` starts with `//` instead of `.//`, the dot will be appended
-     * automatically.
-     *
-     * This method works across navigation.
-     *
-     * ```ts
-     * import puppeteer from 'puppeteer';
-     * (async () => {
-     *   const browser = await puppeteer.launch();
-     *   const page = await browser.newPage();
-     *   let currentURL;
-     *   page
-     *     .waitForXPath('//img')
-     *     .then(() => console.log('First URL with image: ' + currentURL));
-     *   for (currentURL of [
-     *     'https://example.com',
-     *     'https://google.com',
-     *     'https://bbc.com',
-     *   ]) {
-     *     await page.goto(currentURL);
-     *   }
-     *   await browser.close();
-     * })();
-     * ```
-     *
-     * @param xpath - A
-     * {@link https://developer.mozilla.org/en-US/docs/Web/XPath | xpath} of an
-     * element to wait for
-     * @param options - Optional waiting parameters
-     * @returns Promise which resolves when element specified by xpath string is
-     * added to DOM. Resolves to `null` if waiting for `hidden: true` and xpath is
-     * not found in DOM.
-     * @remarks
-     * The optional Argument `options` have properties:
-     *
-     * - `visible`: A boolean to wait for element to be present in DOM and to be
-     *   visible, i.e. to not have `display: none` or `visibility: hidden` CSS
-     *   properties. Defaults to `false`.
-     *
-     * - `hidden`: A boolean wait for element to not be found in the DOM or to be
-     *   hidden, i.e. have `display: none` or `visibility: hidden` CSS properties.
-     *   Defaults to `false`.
-     *
-     * - `timeout`: A number which is maximum time to wait for in milliseconds.
-     *   Defaults to `30000` (30 seconds). Pass `0` to disable timeout. The
-     *   default value can be changed by using the {@link Page.setDefaultTimeout}
-     *   method.
-     */
     async waitForXPath(xpath, options = {}) {
         if (xpath.startsWith('//')) {
             xpath = `.${xpath}`;
         }
         return this.waitForSelector(`xpath/${xpath}`, options);
     }
-    /**
-     * Converts the current handle to the given element type.
-     *
-     * @example
-     *
-     * ```ts
-     * const element: ElementHandle<Element> = await page.$(
-     *   '.class-name-of-anchor'
-     * );
-     * // DO NOT DISPOSE `element`, this will be always be the same handle.
-     * const anchor: ElementHandle<HTMLAnchorElement> = await element.toElement(
-     *   'a'
-     * );
-     * ```
-     *
-     * @param tagName - The tag name of the desired element type.
-     * @throws An error if the handle does not match. **The handle will not be
-     * automatically disposed.**
-     */
     async toElement(tagName) {
         const isMatchingTagName = await this.evaluate((node, tagName) => {
             return node.nodeName === tagName.toUpperCase();
@@ -30944,10 +33684,6 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
     asElement() {
         return this;
     }
-    /**
-     * Resolves to the content frame for element handles referencing
-     * iframe nodes, or null otherwise
-     */
     async contentFrame() {
         const nodeInfo = await this.client.send('DOM.describeNode', {
             objectId: this.remoteObject().objectId,
@@ -30955,11 +33691,8 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         if (typeof nodeInfo.node.frameId !== 'string') {
             return null;
         }
-        return __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_frameManager_get).frame(nodeInfo.node.frameId);
+        return __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_frameManager_get).frame(nodeInfo.node.frameId);
     }
-    /**
-     * Returns the middle point within an element unless a specific offset is provided.
-     */
     async clickablePoint(offset) {
         const [result, layoutMetrics] = await Promise.all([
             this.client
@@ -30967,7 +33700,7 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
                 objectId: this.remoteObject().objectId,
             })
                 .catch(util_js_1.debugError),
-            __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get)._client().send('Page.getLayoutMetrics'),
+            __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get)._client().send('Page.getLayoutMetrics'),
         ]);
         if (!result || !result.quads.length) {
             throw new Error('Node is either not clickable or not an HTMLElement');
@@ -30975,16 +33708,16 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         // Filter out quads that have too small area to click into.
         // Fallback to `layoutViewport` in case of using Firefox.
         const { clientWidth, clientHeight } = layoutMetrics.cssLayoutViewport || layoutMetrics.layoutViewport;
-        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _ElementHandle_frame, "f"));
+        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _CDPElementHandle_frame, "f"));
         const quads = result.quads
             .map(quad => {
-            return __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, quad);
+            return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, quad);
         })
             .map(quad => {
             return applyOffsetsToQuad(quad, offsetX, offsetY);
         })
             .map(quad => {
-            return __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_intersectQuadWithViewport).call(this, quad, clientWidth, clientHeight);
+            return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_intersectQuadWithViewport).call(this, quad, clientWidth, clientHeight);
         })
             .filter(quad => {
             return computeQuadArea(quad) > 1;
@@ -31031,9 +33764,9 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
      * If the element is detached from DOM, the method throws an error.
      */
     async hover() {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const { x, y } = await this.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.move(x, y);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.move(x, y);
     }
     /**
      * This method scrolls element into view if needed, and then
@@ -31041,68 +33774,40 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
      * If the element is detached from DOM, the method throws an error.
      */
     async click(options = {}) {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const { x, y } = await this.clickablePoint(options.offset);
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.click(x, y, options);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.click(x, y, options);
     }
     /**
      * This method creates and captures a dragevent from the element.
      */
     async drag(target) {
-        (0, assert_js_1.assert)(__classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).isDragInterceptionEnabled(), 'Drag Interception is not enabled!');
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        (0, assert_js_1.assert)(__classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).isDragInterceptionEnabled(), 'Drag Interception is not enabled!');
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const start = await this.clickablePoint();
-        return await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.drag(start, target);
+        return await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.drag(start, target);
     }
-    /**
-     * This method creates a `dragenter` event on the element.
-     */
     async dragEnter(data = { items: [], dragOperationsMask: 1 }) {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const target = await this.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.dragEnter(target, data);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.dragEnter(target, data);
     }
-    /**
-     * This method creates a `dragover` event on the element.
-     */
     async dragOver(data = { items: [], dragOperationsMask: 1 }) {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const target = await this.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.dragOver(target, data);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.dragOver(target, data);
     }
-    /**
-     * This method triggers a drop on the element.
-     */
     async drop(data = { items: [], dragOperationsMask: 1 }) {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const destination = await this.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.drop(destination, data);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.drop(destination, data);
     }
-    /**
-     * This method triggers a dragenter, dragover, and drop on the element.
-     */
     async dragAndDrop(target, options) {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const startPoint = await this.clickablePoint();
         const targetPoint = await target.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).mouse.dragAndDrop(startPoint, targetPoint, options);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).mouse.dragAndDrop(startPoint, targetPoint, options);
     }
-    /**
-     * Triggers a `change` and `input` event once all the provided options have been
-     * selected. If there's no `<select>` element matching `selector`, the method
-     * throws an error.
-     *
-     * @example
-     *
-     * ```ts
-     * handle.select('blue'); // single selection
-     * handle.select('red', 'green', 'blue'); // multiple selections
-     * ```
-     *
-     * @param values - Values of options to select. If the `<select>` has the
-     * `multiple` attribute, all values are considered, otherwise only the first
-     * one is taken into account.
-     */
     async select(...values) {
         for (const value of values) {
             (0, assert_js_1.assert)((0, util_js_1.isString)(value), 'Values must be strings. Found value "' +
@@ -31142,16 +33847,6 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
             return [...selectedValues.values()];
         }, values);
     }
-    /**
-     * This method expects `elementHandle` to point to an
-     * {@link https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input | input element}.
-     *
-     * @param filePaths - Sets the value of the file input to these paths.
-     * If a path is relative, then it is resolved against the
-     * {@link https://nodejs.org/api/process.html#process_process_cwd | current working directory}.
-     * Note for locals script connecting to remote chrome environments,
-     * paths must be absolute.
-     */
     async uploadFile(...filePaths) {
         const isMultiple = await this.evaluate(element => {
             return element.multiple;
@@ -31177,7 +33872,9 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
             }
         });
         const { objectId } = this.remoteObject();
-        const { node } = await this.client.send('DOM.describeNode', { objectId });
+        const { node } = await this.client.send('DOM.describeNode', {
+            objectId,
+        });
         const { backendNodeId } = node;
         /*  The zero-length array is a special case, it seems that
              DOM.setFileInputFiles does not actually update the files in that case,
@@ -31199,19 +33896,26 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
             });
         }
     }
-    /**
-     * This method scrolls element into view if needed, and then uses
-     * {@link Touchscreen.tap} to tap in the center of the element.
-     * If the element is detached from DOM, the method throws an error.
-     */
     async tap() {
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         const { x, y } = await this.clickablePoint();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).touchscreen.tap(x, y);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).touchscreen.touchStart(x, y);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).touchscreen.touchEnd();
     }
-    /**
-     * Calls {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus | focus} on the element.
-     */
+    async touchStart() {
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
+        const { x, y } = await this.clickablePoint();
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).touchscreen.touchStart(x, y);
+    }
+    async touchMove() {
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
+        const { x, y } = await this.clickablePoint();
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).touchscreen.touchMove(x, y);
+    }
+    async touchEnd() {
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).touchscreen.touchEnd();
+    }
     async focus() {
         await this.evaluate(element => {
             if (!(element instanceof HTMLElement)) {
@@ -31220,61 +33924,20 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
             return element.focus();
         });
     }
-    /**
-     * Focuses the element, and then sends a `keydown`, `keypress`/`input`, and
-     * `keyup` event for each character in the text.
-     *
-     * To press a special key, like `Control` or `ArrowDown`,
-     * use {@link ElementHandle.press}.
-     *
-     * @example
-     *
-     * ```ts
-     * await elementHandle.type('Hello'); // Types instantly
-     * await elementHandle.type('World', {delay: 100}); // Types slower, like a user
-     * ```
-     *
-     * @example
-     * An example of typing into a text field and then submitting the form:
-     *
-     * ```ts
-     * const elementHandle = await page.$('input');
-     * await elementHandle.type('some text');
-     * await elementHandle.press('Enter');
-     * ```
-     */
     async type(text, options) {
         await this.focus();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).keyboard.type(text, options);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).keyboard.type(text, options);
     }
-    /**
-     * Focuses the element, and then uses {@link Keyboard.down} and {@link Keyboard.up}.
-     *
-     * @remarks
-     * If `key` is a single character and no modifier keys besides `Shift`
-     * are being held down, a `keypress`/`input` event will also be generated.
-     * The `text` option can be specified to force an input event to be generated.
-     *
-     * **NOTE** Modifier keys DO affect `elementHandle.press`. Holding down `Shift`
-     * will type the text in upper case.
-     *
-     * @param key - Name of key to press, such as `ArrowLeft`.
-     * See {@link KeyInput} for a list of all key names.
-     */
     async press(key, options) {
         await this.focus();
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).keyboard.press(key, options);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).keyboard.press(key, options);
     }
-    /**
-     * This method returns the bounding box of the element (relative to the main frame),
-     * or `null` if the element is not visible.
-     */
     async boundingBox() {
-        const result = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getBoxModel).call(this);
+        const result = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_getBoxModel).call(this);
         if (!result) {
             return null;
         }
-        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _ElementHandle_frame, "f"));
+        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _CDPElementHandle_frame, "f"));
         const quad = result.model.border;
         const x = Math.min(quad[0], quad[2], quad[4], quad[6]);
         const y = Math.min(quad[1], quad[3], quad[5], quad[7]);
@@ -31282,40 +33945,27 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         const height = Math.max(quad[1], quad[3], quad[5], quad[7]) - y;
         return { x: x + offsetX, y: y + offsetY, width, height };
     }
-    /**
-     * This method returns boxes of the element, or `null` if the element is not visible.
-     *
-     * @remarks
-     *
-     * Boxes are represented as an array of points;
-     * Each Point is an object `{x, y}`. Box points are sorted clock-wise.
-     */
     async boxModel() {
-        const result = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getBoxModel).call(this);
+        const result = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_getBoxModel).call(this);
         if (!result) {
             return null;
         }
-        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _ElementHandle_frame, "f"));
+        const { offsetX, offsetY } = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_getOOPIFOffsets).call(this, __classPrivateFieldGet(this, _CDPElementHandle_frame, "f"));
         const { content, padding, border, margin, width, height } = result.model;
         return {
-            content: applyOffsetsToQuad(__classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, content), offsetX, offsetY),
-            padding: applyOffsetsToQuad(__classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, padding), offsetX, offsetY),
-            border: applyOffsetsToQuad(__classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, border), offsetX, offsetY),
-            margin: applyOffsetsToQuad(__classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, margin), offsetX, offsetY),
+            content: applyOffsetsToQuad(__classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, content), offsetX, offsetY),
+            padding: applyOffsetsToQuad(__classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, padding), offsetX, offsetY),
+            border: applyOffsetsToQuad(__classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, border), offsetX, offsetY),
+            margin: applyOffsetsToQuad(__classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, margin), offsetX, offsetY),
             width,
             height,
         };
     }
-    /**
-     * This method scrolls element into view if needed, and then uses
-     * {@link Page.screenshot} to take a screenshot of the element.
-     * If the element is detached from DOM, the method throws an error.
-     */
     async screenshot(options = {}) {
         let needsViewportReset = false;
         let boundingBox = await this.boundingBox();
         (0, assert_js_1.assert)(boundingBox, 'Node is either not visible or not an HTMLElement');
-        const viewport = __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).viewport();
+        const viewport = __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).viewport();
         if (viewport &&
             (boundingBox.width > viewport.width ||
                 boundingBox.height > viewport.height)) {
@@ -31323,10 +33973,10 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
                 width: Math.max(viewport.width, Math.ceil(boundingBox.width)),
                 height: Math.max(viewport.height, Math.ceil(boundingBox.height)),
             };
-            await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).setViewport(Object.assign({}, viewport, newViewport));
+            await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).setViewport(Object.assign({}, viewport, newViewport));
             needsViewportReset = true;
         }
-        await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_scrollIntoViewIfNeeded).call(this);
+        await __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_scrollIntoViewIfNeeded).call(this);
         boundingBox = await this.boundingBox();
         (0, assert_js_1.assert)(boundingBox, 'Node is either not visible or not an HTMLElement');
         (0, assert_js_1.assert)(boundingBox.width !== 0, 'Node has 0 width.');
@@ -31337,17 +33987,14 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
         const clip = Object.assign({}, boundingBox);
         clip.x += pageX;
         clip.y += pageY;
-        const imageData = await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).screenshot(Object.assign({}, {
+        const imageData = await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).screenshot(Object.assign({}, {
             clip,
         }, options));
         if (needsViewportReset && viewport) {
-            await __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).setViewport(viewport);
+            await __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).setViewport(viewport);
         }
         return imageData;
     }
-    /**
-     * Resolves to true if the element is visible in the current viewport.
-     */
     async isIntersectingViewport(options) {
         const { threshold = 0 } = options !== null && options !== void 0 ? options : {};
         return await this.evaluate(async (element, threshold) => {
@@ -31361,13 +34008,20 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
             return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
         }, threshold);
     }
+    async dispose() {
+        if (__classPrivateFieldGet(this, _CDPElementHandle_disposed, "f")) {
+            return;
+        }
+        __classPrivateFieldSet(this, _CDPElementHandle_disposed, true, "f");
+        await (0, util_js_1.releaseObject)(this.client, __classPrivateFieldGet(this, _CDPElementHandle_remoteObject, "f"));
+    }
 }
-exports.ElementHandle = ElementHandle;
-_ElementHandle_frame = new WeakMap(), _ElementHandle_instances = new WeakSet(), _ElementHandle_frameManager_get = function _ElementHandle_frameManager_get() {
-    return __classPrivateFieldGet(this, _ElementHandle_frame, "f")._frameManager;
-}, _ElementHandle_page_get = function _ElementHandle_page_get() {
-    return __classPrivateFieldGet(this, _ElementHandle_frame, "f").page();
-}, _ElementHandle_scrollIntoViewIfNeeded = async function _ElementHandle_scrollIntoViewIfNeeded() {
+exports.CDPElementHandle = CDPElementHandle;
+_CDPElementHandle_disposed = new WeakMap(), _CDPElementHandle_frame = new WeakMap(), _CDPElementHandle_context = new WeakMap(), _CDPElementHandle_remoteObject = new WeakMap(), _CDPElementHandle_instances = new WeakSet(), _CDPElementHandle_frameManager_get = function _CDPElementHandle_frameManager_get() {
+    return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f")._frameManager;
+}, _CDPElementHandle_page_get = function _CDPElementHandle_page_get() {
+    return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f").page();
+}, _CDPElementHandle_scrollIntoViewIfNeeded = async function _CDPElementHandle_scrollIntoViewIfNeeded() {
     const error = await this.evaluate(async (element) => {
         if (!element.isConnected) {
             return 'Node is detached from document';
@@ -31407,9 +34061,9 @@ _ElementHandle_frame = new WeakMap(), _ElementHandle_instances = new WeakSet(), 
                     behavior: 'instant',
                 });
             }
-        }, __classPrivateFieldGet(this, _ElementHandle_instances, "a", _ElementHandle_page_get).isJavaScriptEnabled());
+        }, __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).isJavaScriptEnabled());
     }
-}, _ElementHandle_getOOPIFOffsets = async function _ElementHandle_getOOPIFOffsets(frame) {
+}, _CDPElementHandle_getOOPIFOffsets = async function _CDPElementHandle_getOOPIFOffsets(frame) {
     let offsetX = 0;
     let offsetY = 0;
     let currentFrame = frame;
@@ -31429,27 +34083,27 @@ _ElementHandle_frame = new WeakMap(), _ElementHandle_instances = new WeakSet(), 
             break;
         }
         const contentBoxQuad = result.model.content;
-        const topLeftCorner = __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_fromProtocolQuad).call(this, contentBoxQuad)[0];
+        const topLeftCorner = __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_fromProtocolQuad).call(this, contentBoxQuad)[0];
         offsetX += topLeftCorner.x;
         offsetY += topLeftCorner.y;
         currentFrame = parent;
     }
     return { offsetX, offsetY };
-}, _ElementHandle_getBoxModel = function _ElementHandle_getBoxModel() {
+}, _CDPElementHandle_getBoxModel = function _CDPElementHandle_getBoxModel() {
     const params = {
         objectId: this.remoteObject().objectId,
     };
     return this.client.send('DOM.getBoxModel', params).catch(error => {
         return (0, util_js_1.debugError)(error);
     });
-}, _ElementHandle_fromProtocolQuad = function _ElementHandle_fromProtocolQuad(quad) {
+}, _CDPElementHandle_fromProtocolQuad = function _CDPElementHandle_fromProtocolQuad(quad) {
     return [
         { x: quad[0], y: quad[1] },
         { x: quad[2], y: quad[3] },
         { x: quad[4], y: quad[5] },
         { x: quad[6], y: quad[7] },
     ];
-}, _ElementHandle_intersectQuadWithViewport = function _ElementHandle_intersectQuadWithViewport(quad, width, height) {
+}, _CDPElementHandle_intersectQuadWithViewport = function _CDPElementHandle_intersectQuadWithViewport(quad, width, height) {
     return quad.map(point => {
         return {
             x: Math.min(Math.max(point.x, 0), width),
@@ -31834,10 +34488,17 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _ExecutionContext_instances, _ExecutionContext_evaluate;
+var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
+    if (kind === "m") throw new TypeError("Private method is not writable");
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+    return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
+};
+var _ExecutionContext_instances, _ExecutionContext_puppeteerUtil, _ExecutionContext_evaluate;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ExecutionContext = exports.EVALUATION_SCRIPT_URL = void 0;
-const JSHandle_js_1 = __nccwpck_require__(2045);
+const injected_js_1 = __nccwpck_require__(8153);
+const JSHandle_js_1 = __nccwpck_require__(882);
 const LazyArg_js_1 = __nccwpck_require__(4897);
 const util_js_1 = __nccwpck_require__(8274);
 /**
@@ -31873,10 +34534,21 @@ class ExecutionContext {
      */
     constructor(client, contextPayload, world) {
         _ExecutionContext_instances.add(this);
+        _ExecutionContext_puppeteerUtil.set(this, void 0);
         this._client = client;
         this._world = world;
         this._contextId = contextPayload.id;
         this._contextName = contextPayload.name;
+    }
+    get puppeteerUtil() {
+        if (!__classPrivateFieldGet(this, _ExecutionContext_puppeteerUtil, "f")) {
+            __classPrivateFieldSet(this, _ExecutionContext_puppeteerUtil, this.evaluateHandle(`(() => {
+            const module = {};
+            ${injected_js_1.source}
+            return module.exports.default;
+          })()`), "f");
+        }
+        return __classPrivateFieldGet(this, _ExecutionContext_puppeteerUtil, "f");
     }
     /**
      * Evaluates the given function.
@@ -31975,7 +34647,7 @@ class ExecutionContext {
     }
 }
 exports.ExecutionContext = ExecutionContext;
-_ExecutionContext_instances = new WeakSet(), _ExecutionContext_evaluate = async function _ExecutionContext_evaluate(returnByValue, pageFunction, ...args) {
+_ExecutionContext_puppeteerUtil = new WeakMap(), _ExecutionContext_instances = new WeakSet(), _ExecutionContext_evaluate = async function _ExecutionContext_evaluate(returnByValue, pageFunction, ...args) {
     const suffix = `//# sourceURL=${exports.EVALUATION_SCRIPT_URL}`;
     if ((0, util_js_1.isString)(pageFunction)) {
         const contextId = this._contextId;
@@ -31999,32 +34671,10 @@ _ExecutionContext_instances = new WeakSet(), _ExecutionContext_evaluate = async 
             ? (0, util_js_1.valueFromRemoteObject)(remoteObject)
             : (0, util_js_1.createJSHandle)(this, remoteObject);
     }
-    let functionText = pageFunction.toString();
-    try {
-        new Function('(' + functionText + ')');
-    }
-    catch (error) {
-        // This means we might have a function shorthand. Try another
-        // time prefixing 'function '.
-        if (functionText.startsWith('async ')) {
-            functionText =
-                'async function ' + functionText.substring('async '.length);
-        }
-        else {
-            functionText = 'function ' + functionText;
-        }
-        try {
-            new Function('(' + functionText + ')');
-        }
-        catch (error) {
-            // We tried hard to serialize, but there's a weird beast here.
-            throw new Error('Passed function is not well-serializable!');
-        }
-    }
     let callFunctionOnPromise;
     try {
         callFunctionOnPromise = this._client.send('Runtime.callFunctionOn', {
-            functionDeclaration: functionText + '\n' + suffix + '\n',
+            functionDeclaration: (0, util_js_1.stringifyFunction)(pageFunction) + '\n' + suffix + '\n',
             executionContextId: this._contextId,
             arguments: await Promise.all(args.map(convertArgument.bind(this))),
             returnByValue,
@@ -32048,7 +34698,7 @@ _ExecutionContext_instances = new WeakSet(), _ExecutionContext_evaluate = async 
         : (0, util_js_1.createJSHandle)(this, remoteObject);
     async function convertArgument(arg) {
         if (arg instanceof LazyArg_js_1.LazyArg) {
-            arg = await arg.get();
+            arg = await arg.get(this);
         }
         if (typeof arg === 'bigint') {
             // eslint-disable-line valid-typeof
@@ -32474,6 +35124,7 @@ const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const LifecycleWatcher_js_1 = __nccwpck_require__(2169);
 const QueryHandler_js_1 = __nccwpck_require__(3200);
 const util_js_1 = __nccwpck_require__(8274);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 /**
  * Represents a DOM frame.
  *
@@ -32616,11 +35267,11 @@ class Frame {
      * calling {@link HTTPResponse.status}.
      */
     async goto(url, options = {}) {
-        const { referer = this._frameManager.networkManager.extraHTTPHeaders()['referer'], waitUntil = ['load'], timeout = this._frameManager.timeoutSettings.navigationTimeout(), } = options;
+        const { referer = this._frameManager.networkManager.extraHTTPHeaders()['referer'], referrerPolicy = this._frameManager.networkManager.extraHTTPHeaders()['referer-policy'], waitUntil = ['load'], timeout = this._frameManager.timeoutSettings.navigationTimeout(), } = options;
         let ensureNewDocumentNavigation = false;
         const watcher = new LifecycleWatcher_js_1.LifecycleWatcher(this._frameManager, this, waitUntil, timeout);
         let error = await Promise.race([
-            navigate(__classPrivateFieldGet(this, _Frame_client, "f"), url, referer, this._id),
+            navigate(__classPrivateFieldGet(this, _Frame_client, "f"), url, referer, referrerPolicy, this._id),
             watcher.timeoutOrTerminationPromise(),
         ]);
         if (!error) {
@@ -32640,14 +35291,18 @@ class Frame {
         finally {
             watcher.dispose();
         }
-        async function navigate(client, url, referrer, frameId) {
+        async function navigate(client, url, referrer, referrerPolicy, frameId) {
             try {
                 const response = await client.send('Page.navigate', {
                     url,
                     referrer,
                     frameId,
+                    referrerPolicy,
                 });
                 ensureNewDocumentNavigation = !!response.loaderId;
+                if (response.errorText === 'net::ERR_HTTP_RESPONSE_CODE_FAILURE') {
+                    return null;
+                }
                 return response.errorText
                     ? new Error(`${response.errorText} at ${url}`)
                     : null;
@@ -32869,7 +35524,7 @@ class Frame {
      * an XPath.
      *
      * @param xpath - the XPath expression to wait for.
-     * @param options - options to configure the visiblity of the element and how
+     * @param options - options to configure the visibility of the element and how
      * long to wait before timing out.
      */
     async waitForXPath(xpath, options = {}) {
@@ -33019,7 +35674,9 @@ class Frame {
             document.head.appendChild(script);
             await promise;
             return script;
-        }, await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].puppeteerUtil, { ...options, type, content }));
+        }, LazyArg_js_1.LazyArg.create(context => {
+            return context.puppeteerUtil;
+        }), { ...options, type, content }));
     }
     async addStyleTag(options) {
         let { content = '' } = options;
@@ -33065,7 +35722,9 @@ class Frame {
             document.head.appendChild(element);
             await promise;
             return element;
-        }, await this.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].puppeteerUtil, options));
+        }, LazyArg_js_1.LazyArg.create(context => {
+            return context.puppeteerUtil;
+        }), options));
     }
     /**
      * Clicks the first element found that matches `selector`.
@@ -33405,10 +36064,12 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
         }
     }
     executionContextById(contextId, session = __classPrivateFieldGet(this, _FrameManager_client, "f")) {
-        const key = `${session.id()}:${contextId}`;
-        const context = __classPrivateFieldGet(this, _FrameManager_contextIdToContext, "f").get(key);
+        const context = this.getExecutionContextById(contextId, session);
         (0, assert_js_1.assert)(context, 'INTERNAL ERROR: missing context with id = ' + contextId);
         return context;
+    }
+    getExecutionContextById(contextId, session = __classPrivateFieldGet(this, _FrameManager_client, "f")) {
+        return __classPrivateFieldGet(this, _FrameManager_contextIdToContext, "f").get(`${session.id()}:${contextId}`);
     }
     page() {
         return __classPrivateFieldGet(this, _FrameManager_page, "f");
@@ -35249,12 +37910,39 @@ class Touchscreen {
      * @param y - Vertical position of the tap.
      */
     async tap(x, y) {
+        await this.touchStart(x, y);
+        await this.touchEnd();
+    }
+    /**
+     * Dispatches a `touchstart` event.
+     * @param x - Horizontal position of the tap.
+     * @param y - Vertical position of the tap.
+     */
+    async touchStart(x, y) {
         const touchPoints = [{ x: Math.round(x), y: Math.round(y) }];
         await __classPrivateFieldGet(this, _Touchscreen_client, "f").send('Input.dispatchTouchEvent', {
             type: 'touchStart',
             touchPoints,
             modifiers: __classPrivateFieldGet(this, _Touchscreen_keyboard, "f")._modifiers,
         });
+    }
+    /**
+     * Dispatches a `touchMove` event.
+     * @param x - Horizontal position of the move.
+     * @param y - Vertical position of the move.
+     */
+    async touchMove(x, y) {
+        const movePoints = [{ x: Math.round(x), y: Math.round(y) }];
+        await __classPrivateFieldGet(this, _Touchscreen_client, "f").send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: movePoints,
+            modifiers: __classPrivateFieldGet(this, _Touchscreen_keyboard, "f")._modifiers,
+        });
+    }
+    /**
+     * Dispatches a `touchend` event.
+     */
+    async touchEnd() {
         await __classPrivateFieldGet(this, _Touchscreen_client, "f").send('Input.dispatchTouchEvent', {
             type: 'touchEnd',
             touchPoints: [],
@@ -35299,25 +37987,21 @@ var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
     return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
 };
-var _IsolatedWorld_instances, _a, _IsolatedWorld_frame, _IsolatedWorld_document, _IsolatedWorld_context, _IsolatedWorld_detached, _IsolatedWorld_ctxBindings, _IsolatedWorld_boundFunctions, _IsolatedWorld_taskManager, _IsolatedWorld_puppeteerUtil, _IsolatedWorld_bindingIdentifier, _IsolatedWorld_client_get, _IsolatedWorld_frameManager_get, _IsolatedWorld_timeoutSettings_get, _IsolatedWorld_injectPuppeteerUtil, _IsolatedWorld_settingUpBinding, _IsolatedWorld_onBindingCalled;
+var _IsolatedWorld_instances, _a, _IsolatedWorld_frame, _IsolatedWorld_document, _IsolatedWorld_context, _IsolatedWorld_detached, _IsolatedWorld_ctxBindings, _IsolatedWorld_boundFunctions, _IsolatedWorld_taskManager, _IsolatedWorld_bindingIdentifier, _IsolatedWorld_client_get, _IsolatedWorld_frameManager_get, _IsolatedWorld_timeoutSettings_get, _IsolatedWorld_settingUpBinding, _IsolatedWorld_onBindingCalled;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.IsolatedWorld = void 0;
-const injected_js_1 = __nccwpck_require__(8153);
 const assert_js_1 = __nccwpck_require__(7729);
 const DeferredPromise_js_1 = __nccwpck_require__(7015);
 const ErrorLike_js_1 = __nccwpck_require__(2937);
-const LazyArg_js_1 = __nccwpck_require__(4897);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const LifecycleWatcher_js_1 = __nccwpck_require__(2169);
 const util_js_1 = __nccwpck_require__(8274);
 const WaitTask_js_1 = __nccwpck_require__(806);
-const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 /**
  * @internal
  */
 class IsolatedWorld {
-    get puppeteerUtil() {
-        return __classPrivateFieldGet(this, _IsolatedWorld_puppeteerUtil, "f");
-    }
     get taskManager() {
         return __classPrivateFieldGet(this, _IsolatedWorld_taskManager, "f");
     }
@@ -35335,7 +38019,6 @@ class IsolatedWorld {
         // Contains mapping from functions that should be bound to Puppeteer functions.
         _IsolatedWorld_boundFunctions.set(this, new Map());
         _IsolatedWorld_taskManager.set(this, new WaitTask_js_1.TaskManager());
-        _IsolatedWorld_puppeteerUtil.set(this, (0, DeferredPromise_js_1.createDeferredPromise)());
         // If multiple waitFor are set up asynchronously, we need to wait for the
         // first one to set up the binding in the page before running the others.
         _IsolatedWorld_settingUpBinding.set(this, null);
@@ -35376,7 +38059,7 @@ class IsolatedWorld {
             }
             catch (error) {
                 // The WaitTask may already have been resolved by timing out, or the
-                // exection context may have been destroyed.
+                // execution context may have been destroyed.
                 // In both caes, the promises above are rejected with a protocol error.
                 // We can safely ignores these, as the WaitTask is re-installed in
                 // the next execution context if needed.
@@ -35396,13 +38079,12 @@ class IsolatedWorld {
     }
     clearContext() {
         __classPrivateFieldSet(this, _IsolatedWorld_document, undefined, "f");
-        __classPrivateFieldSet(this, _IsolatedWorld_puppeteerUtil, (0, DeferredPromise_js_1.createDeferredPromise)(), "f");
         __classPrivateFieldSet(this, _IsolatedWorld_context, (0, DeferredPromise_js_1.createDeferredPromise)(), "f");
     }
     setContext(context) {
-        __classPrivateFieldGet(this, _IsolatedWorld_instances, "m", _IsolatedWorld_injectPuppeteerUtil).call(this, context);
         __classPrivateFieldGet(this, _IsolatedWorld_ctxBindings, "f").clear();
         __classPrivateFieldGet(this, _IsolatedWorld_context, "f").resolve(context);
+        __classPrivateFieldGet(this, _IsolatedWorld_taskManager, "f").rerunAll();
     }
     hasContext() {
         return __classPrivateFieldGet(this, _IsolatedWorld_context, "f").resolved();
@@ -35584,14 +38266,8 @@ class IsolatedWorld {
                 polling: waitForVisible || waitForHidden ? 'raf' : 'mutation',
                 root,
                 timeout,
-            }, new LazyArg_js_1.LazyArg(async () => {
-                try {
-                    // In case CDP fails.
-                    return await this.puppeteerUtil;
-                }
-                catch {
-                    return undefined;
-                }
+            }, LazyArg_js_1.LazyArg.create(context => {
+                return context.puppeteerUtil;
             }), queryOne.toString(), selector, root, waitForVisible ? true : waitForHidden ? false : undefined);
             const elementHandle = handle.asElement();
             if (!elementHandle) {
@@ -35649,24 +38325,12 @@ class IsolatedWorld {
     }
 }
 exports.IsolatedWorld = IsolatedWorld;
-_a = IsolatedWorld, _IsolatedWorld_frame = new WeakMap(), _IsolatedWorld_document = new WeakMap(), _IsolatedWorld_context = new WeakMap(), _IsolatedWorld_detached = new WeakMap(), _IsolatedWorld_ctxBindings = new WeakMap(), _IsolatedWorld_boundFunctions = new WeakMap(), _IsolatedWorld_taskManager = new WeakMap(), _IsolatedWorld_puppeteerUtil = new WeakMap(), _IsolatedWorld_settingUpBinding = new WeakMap(), _IsolatedWorld_onBindingCalled = new WeakMap(), _IsolatedWorld_instances = new WeakSet(), _IsolatedWorld_client_get = function _IsolatedWorld_client_get() {
+_a = IsolatedWorld, _IsolatedWorld_frame = new WeakMap(), _IsolatedWorld_document = new WeakMap(), _IsolatedWorld_context = new WeakMap(), _IsolatedWorld_detached = new WeakMap(), _IsolatedWorld_ctxBindings = new WeakMap(), _IsolatedWorld_boundFunctions = new WeakMap(), _IsolatedWorld_taskManager = new WeakMap(), _IsolatedWorld_settingUpBinding = new WeakMap(), _IsolatedWorld_onBindingCalled = new WeakMap(), _IsolatedWorld_instances = new WeakSet(), _IsolatedWorld_client_get = function _IsolatedWorld_client_get() {
     return __classPrivateFieldGet(this, _IsolatedWorld_frame, "f")._client();
 }, _IsolatedWorld_frameManager_get = function _IsolatedWorld_frameManager_get() {
     return __classPrivateFieldGet(this, _IsolatedWorld_frame, "f")._frameManager;
 }, _IsolatedWorld_timeoutSettings_get = function _IsolatedWorld_timeoutSettings_get() {
     return __classPrivateFieldGet(this, _IsolatedWorld_instances, "a", _IsolatedWorld_frameManager_get).timeoutSettings;
-}, _IsolatedWorld_injectPuppeteerUtil = async function _IsolatedWorld_injectPuppeteerUtil(context) {
-    try {
-        __classPrivateFieldGet(this, _IsolatedWorld_puppeteerUtil, "f").resolve((await context.evaluateHandle(`(() => {
-              const module = {};
-              ${injected_js_1.source}
-              return module.exports.default;
-            })()`)));
-        __classPrivateFieldGet(this, _IsolatedWorld_taskManager, "f").rerunAll();
-    }
-    catch (error) {
-        (0, util_js_1.debugError)(error);
-    }
 };
 _IsolatedWorld_bindingIdentifier = { value: (name, contextId) => {
         return `${name}_${contextId}`;
@@ -35746,72 +38410,40 @@ var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
     return (kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value)), value;
 };
-var _JSHandle_disposed, _JSHandle_context, _JSHandle_remoteObject;
+var _CDPJSHandle_disposed, _CDPJSHandle_context, _CDPJSHandle_remoteObject;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.JSHandle = void 0;
+exports.CDPJSHandle = void 0;
+const JSHandle_js_1 = __nccwpck_require__(882);
 const assert_js_1 = __nccwpck_require__(7729);
 const util_js_1 = __nccwpck_require__(8274);
 /**
- * Represents a reference to a JavaScript object. Instances can be created using
- * {@link Page.evaluateHandle}.
- *
- * Handles prevent the referenced JavaScript object from being garbage-collected
- * unless the handle is purposely {@link JSHandle.dispose | disposed}. JSHandles
- * are auto-disposed when their associated frame is navigated away or the parent
- * context gets destroyed.
- *
- * Handles can be used as arguments for any evaluation function such as
- * {@link Page.$eval}, {@link Page.evaluate}, and {@link Page.evaluateHandle}.
- * They are resolved to their referenced object.
- *
- * @example
- *
- * ```ts
- * const windowHandle = await page.evaluateHandle(() => window);
- * ```
- *
- * @public
+ * @internal
  */
-class JSHandle {
-    /**
-     * @internal
-     */
-    get client() {
-        return __classPrivateFieldGet(this, _JSHandle_context, "f")._client;
-    }
-    /**
-     * @internal
-     */
+class CDPJSHandle extends JSHandle_js_1.JSHandle {
     get disposed() {
-        return __classPrivateFieldGet(this, _JSHandle_disposed, "f");
+        return __classPrivateFieldGet(this, _CDPJSHandle_disposed, "f");
     }
-    /**
-     * @internal
-     */
     constructor(context, remoteObject) {
-        _JSHandle_disposed.set(this, false);
-        _JSHandle_context.set(this, void 0);
-        _JSHandle_remoteObject.set(this, void 0);
-        __classPrivateFieldSet(this, _JSHandle_context, context, "f");
-        __classPrivateFieldSet(this, _JSHandle_remoteObject, remoteObject, "f");
+        super();
+        _CDPJSHandle_disposed.set(this, false);
+        _CDPJSHandle_context.set(this, void 0);
+        _CDPJSHandle_remoteObject.set(this, void 0);
+        __classPrivateFieldSet(this, _CDPJSHandle_context, context, "f");
+        __classPrivateFieldSet(this, _CDPJSHandle_remoteObject, remoteObject, "f");
     }
-    /**
-     * @internal
-     */
     executionContext() {
-        return __classPrivateFieldGet(this, _JSHandle_context, "f");
+        return __classPrivateFieldGet(this, _CDPJSHandle_context, "f");
+    }
+    get client() {
+        return __classPrivateFieldGet(this, _CDPJSHandle_context, "f")._client;
     }
     /**
-     * Evaluates the given function with the current handle as its first argument.
-     *
      * @see {@link ExecutionContext.evaluate} for more details.
      */
     async evaluate(pageFunction, ...args) {
         return await this.executionContext().evaluate(pageFunction, this, ...args);
     }
     /**
-     * Evaluates the given function with the current handle as its first argument.
-     *
      * @see {@link ExecutionContext.evaluateHandle} for more details.
      */
     async evaluateHandle(pageFunction, ...args) {
@@ -35822,30 +38454,12 @@ class JSHandle {
             return object[propertyName];
         }, propertyName);
     }
-    /**
-     * Gets a map of handles representing the properties of the current handle.
-     *
-     * @example
-     *
-     * ```ts
-     * const listHandle = await page.evaluateHandle(() => document.body.children);
-     * const properties = await listHandle.getProperties();
-     * const children = [];
-     * for (const property of properties.values()) {
-     *   const element = property.asElement();
-     *   if (element) {
-     *     children.push(element);
-     *   }
-     * }
-     * children; // holds elementHandles to all children of document.body
-     * ```
-     */
     async getProperties() {
-        (0, assert_js_1.assert)(__classPrivateFieldGet(this, _JSHandle_remoteObject, "f").objectId);
+        (0, assert_js_1.assert)(__classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").objectId);
         // We use Runtime.getProperties rather than iterative building because the
         // iterative approach might create a distorted snapshot.
         const response = await this.client.send('Runtime.getProperties', {
-            objectId: __classPrivateFieldGet(this, _JSHandle_remoteObject, "f").objectId,
+            objectId: __classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").objectId,
             ownProperties: true,
         });
         const result = new Map();
@@ -35853,21 +38467,13 @@ class JSHandle {
             if (!property.enumerable || !property.value) {
                 continue;
             }
-            result.set(property.name, (0, util_js_1.createJSHandle)(__classPrivateFieldGet(this, _JSHandle_context, "f"), property.value));
+            result.set(property.name, (0, util_js_1.createJSHandle)(__classPrivateFieldGet(this, _CDPJSHandle_context, "f"), property.value));
         }
         return result;
     }
-    /**
-     * @returns A vanilla object representing the serializable portions of the
-     * referenced object.
-     * @throws Throws if the object cannot be serialized due to circularity.
-     *
-     * @remarks
-     * If the object has a `toJSON` function, it **will not** be called.
-     */
     async jsonValue() {
-        if (!__classPrivateFieldGet(this, _JSHandle_remoteObject, "f").objectId) {
-            return (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _JSHandle_remoteObject, "f"));
+        if (!__classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").objectId) {
+            return (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f"));
         }
         const value = await this.evaluate(object => {
             return object;
@@ -35884,40 +38490,26 @@ class JSHandle {
     asElement() {
         return null;
     }
-    /**
-     * Releases the object referenced by the handle for garbage collection.
-     */
     async dispose() {
-        if (__classPrivateFieldGet(this, _JSHandle_disposed, "f")) {
+        if (__classPrivateFieldGet(this, _CDPJSHandle_disposed, "f")) {
             return;
         }
-        __classPrivateFieldSet(this, _JSHandle_disposed, true, "f");
-        await (0, util_js_1.releaseObject)(this.client, __classPrivateFieldGet(this, _JSHandle_remoteObject, "f"));
+        __classPrivateFieldSet(this, _CDPJSHandle_disposed, true, "f");
+        await (0, util_js_1.releaseObject)(this.client, __classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f"));
     }
-    /**
-     * Returns a string representation of the JSHandle.
-     *
-     * @remarks
-     * Useful during debugging.
-     */
     toString() {
-        if (!__classPrivateFieldGet(this, _JSHandle_remoteObject, "f").objectId) {
-            return 'JSHandle:' + (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _JSHandle_remoteObject, "f"));
+        if (!__classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").objectId) {
+            return 'JSHandle:' + (0, util_js_1.valueFromRemoteObject)(__classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f"));
         }
-        const type = __classPrivateFieldGet(this, _JSHandle_remoteObject, "f").subtype || __classPrivateFieldGet(this, _JSHandle_remoteObject, "f").type;
+        const type = __classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").subtype || __classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f").type;
         return 'JSHandle@' + type;
     }
-    /**
-     * Provides access to the
-     * [Protocol.Runtime.RemoteObject](https://chromedevtools.github.io/devtools-protocol/tot/Runtime/#type-RemoteObject)
-     * backing this handle.
-     */
     remoteObject() {
-        return __classPrivateFieldGet(this, _JSHandle_remoteObject, "f");
+        return __classPrivateFieldGet(this, _CDPJSHandle_remoteObject, "f");
     }
 }
-exports.JSHandle = JSHandle;
-_JSHandle_disposed = new WeakMap(), _JSHandle_context = new WeakMap(), _JSHandle_remoteObject = new WeakMap();
+exports.CDPJSHandle = CDPJSHandle;
+_CDPJSHandle_disposed = new WeakMap(), _CDPJSHandle_context = new WeakMap(), _CDPJSHandle_remoteObject = new WeakMap();
 //# sourceMappingURL=JSHandle.js.map
 
 /***/ }),
@@ -35964,12 +38556,17 @@ class LazyArg {
         _LazyArg_get.set(this, void 0);
         __classPrivateFieldSet(this, _LazyArg_get, get, "f");
     }
-    get() {
-        return __classPrivateFieldGet(this, _LazyArg_get, "f").call(this);
+    async get(context) {
+        return __classPrivateFieldGet(this, _LazyArg_get, "f").call(this, context);
     }
 }
 exports.LazyArg = LazyArg;
 _LazyArg_get = new WeakMap();
+LazyArg.create = (get) => {
+    // We don't want to introduce LazyArg to the type system, otherwise we would
+    // have to make it public.
+    return new LazyArg(get);
+};
 //# sourceMappingURL=LazyArg.js.map
 
 /***/ }),
@@ -37848,7 +40445,11 @@ _CDPPage_closed = new WeakMap(), _CDPPage_client = new WeakMap(), _CDPPage_targe
         // @see https://github.com/puppeteer/puppeteer/issues/3865
         return;
     }
-    const context = __classPrivateFieldGet(this, _CDPPage_frameManager, "f").executionContextById(event.executionContextId, __classPrivateFieldGet(this, _CDPPage_client, "f"));
+    const context = __classPrivateFieldGet(this, _CDPPage_frameManager, "f").getExecutionContextById(event.executionContextId, __classPrivateFieldGet(this, _CDPPage_client, "f"));
+    if (!context) {
+        (0, util_js_1.debugError)(new Error(`ExecutionContext not found for a console message: ${JSON.stringify(event)}`));
+        return;
+    }
     const values = event.args.map(arg => {
         return (0, util_js_1.createJSHandle)(context, arg);
     });
@@ -38309,16 +40910,22 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getQueryHandlerAndSelector = exports.clearCustomQueryHandlers = exports.customQueryHandlerNames = exports.unregisterCustomQueryHandler = exports.registerCustomQueryHandler = void 0;
+const assert_js_1 = __nccwpck_require__(7729);
 const AriaQueryHandler_js_1 = __nccwpck_require__(3082);
-const ElementHandle_js_1 = __nccwpck_require__(865);
+const ElementHandle_js_1 = __nccwpck_require__(3839);
 const Frame_js_1 = __nccwpck_require__(1106);
 const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 function createPuppeteerQueryHandler(handler) {
     const internalHandler = {};
     if (handler.queryOne) {
         const queryOne = handler.queryOne;
         internalHandler.queryOne = async (element, selector) => {
-            const jsHandle = await element.evaluateHandle(queryOne, selector, await element.executionContext()._world.puppeteerUtil);
+            const world = element.executionContext()._world;
+            (0, assert_js_1.assert)(world);
+            const jsHandle = await element.evaluateHandle(queryOne, selector, LazyArg_js_1.LazyArg.create(context => {
+                return context.puppeteerUtil;
+            }));
             const elementHandle = jsHandle.asElement();
             if (elementHandle) {
                 return elementHandle;
@@ -38353,7 +40960,11 @@ function createPuppeteerQueryHandler(handler) {
     if (handler.queryAll) {
         const queryAll = handler.queryAll;
         internalHandler.queryAll = async (element, selector) => {
-            const jsHandle = await element.evaluateHandle(queryAll, selector, await element.executionContext()._world.puppeteerUtil);
+            const world = element.executionContext()._world;
+            (0, assert_js_1.assert)(world);
+            const jsHandle = await element.evaluateHandle(queryAll, selector, LazyArg_js_1.LazyArg.create(context => {
+                return context.puppeteerUtil;
+            }));
             const properties = await jsHandle.getProperties();
             await jsHandle.dispose();
             const result = [];
@@ -39564,6 +42175,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TaskManager = exports.WaitTask = void 0;
 const DeferredPromise_js_1 = __nccwpck_require__(7015);
 const Errors_js_1 = __nccwpck_require__(6315);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 /**
  * @internal
  */
@@ -39623,7 +42235,9 @@ class WaitTask {
                         return new RAFPoller(() => {
                             return fun(...args);
                         });
-                    }, await __classPrivateFieldGet(this, _WaitTask_world, "f").puppeteerUtil, __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
+                    }, LazyArg_js_1.LazyArg.create(context => {
+                        return context.puppeteerUtil;
+                    }), __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
                     break;
                 case 'mutation':
                     __classPrivateFieldSet(this, _WaitTask_poller, await __classPrivateFieldGet(this, _WaitTask_world, "f").evaluateHandle(({ MutationPoller, createFunction }, root, fn, ...args) => {
@@ -39631,7 +42245,9 @@ class WaitTask {
                         return new MutationPoller(() => {
                             return fun(...args);
                         }, root || document);
-                    }, await __classPrivateFieldGet(this, _WaitTask_world, "f").puppeteerUtil, __classPrivateFieldGet(this, _WaitTask_root, "f"), __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
+                    }, LazyArg_js_1.LazyArg.create(context => {
+                        return context.puppeteerUtil;
+                    }), __classPrivateFieldGet(this, _WaitTask_root, "f"), __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
                     break;
                 default:
                     __classPrivateFieldSet(this, _WaitTask_poller, await __classPrivateFieldGet(this, _WaitTask_world, "f").evaluateHandle(({ IntervalPoller, createFunction }, ms, fn, ...args) => {
@@ -39639,7 +42255,9 @@ class WaitTask {
                         return new IntervalPoller(() => {
                             return fun(...args);
                         }, ms);
-                    }, await __classPrivateFieldGet(this, _WaitTask_world, "f").puppeteerUtil, __classPrivateFieldGet(this, _WaitTask_polling, "f"), __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
+                    }, LazyArg_js_1.LazyArg.create(context => {
+                        return context.puppeteerUtil;
+                    }), __classPrivateFieldGet(this, _WaitTask_polling, "f"), __classPrivateFieldGet(this, _WaitTask_fn, "f"), ...__classPrivateFieldGet(this, _WaitTask_args, "f")), "f");
                     break;
             }
             await __classPrivateFieldGet(this, _WaitTask_poller, "f").evaluate(poller => {
@@ -39807,7 +42425,7 @@ class WebWorker extends EventEmitter_js_1.EventEmitter {
         __classPrivateFieldGet(this, _WebWorker_client, "f").on('Runtime.consoleAPICalled', async (event) => {
             const context = await __classPrivateFieldGet(this, _WebWorker_executionContext, "f");
             return consoleAPICalled(event.type, event.args.map((object) => {
-                return new JSHandle_js_1.JSHandle(context, object);
+                return new JSHandle_js_1.CDPJSHandle(context, object);
             }), event.stackTrace);
         });
         __classPrivateFieldGet(this, _WebWorker_client, "f").on('Runtime.exceptionThrown', exception => {
@@ -39874,6 +42492,29 @@ _WebWorker_executionContext = new WeakMap(), _WebWorker_client = new WeakMap(), 
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __classPrivateFieldSet = (this && this.__classPrivateFieldSet) || function (receiver, state, value, kind, f) {
     if (kind === "m") throw new TypeError("Private method is not writable");
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
@@ -39889,7 +42530,7 @@ var _CDPConnectionAdapter_cdp, _CDPConnectionAdapter_adapters, _CDPConnectionAda
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.connectBidiOverCDP = void 0;
 const Connection_js_1 = __nccwpck_require__(5916);
-const index_js_1 = __nccwpck_require__(8208);
+const BidiMapper = __importStar(__nccwpck_require__(1796));
 /**
  * @internal
  */
@@ -39906,7 +42547,7 @@ async function connectBidiOverCDP(cdp) {
             cdpConnectionAdapter.close();
         },
         onmessage(_message) {
-            // The method is overriden by the Connection.
+            // The method is overridden by the Connection.
         },
     };
     transportBiDi.on('bidiResponse', (message) => {
@@ -39914,7 +42555,7 @@ async function connectBidiOverCDP(cdp) {
         pptrTransport.onmessage(JSON.stringify(message));
     });
     const pptrBiDiConnection = new Connection_js_1.Connection(pptrTransport);
-    const bidiServer = await index_js_1.BidiMapper.BidiServer.createAndStart(transportBiDi, cdpConnectionAdapter, '');
+    const bidiServer = await BidiMapper.BidiServer.createAndStart(transportBiDi, cdpConnectionAdapter, '');
     return pptrBiDiConnection;
 }
 exports.connectBidiOverCDP = connectBidiOverCDP;
@@ -39936,7 +42577,7 @@ class CDPConnectionAdapter {
     getCdpClient(id) {
         const session = __classPrivateFieldGet(this, _CDPConnectionAdapter_cdp, "f").session(id);
         if (!session) {
-            throw new Error('Unknonw CDP session with id' + id);
+            throw new Error('Unknown CDP session with id' + id);
         }
         if (!__classPrivateFieldGet(this, _CDPConnectionAdapter_adapters, "f").has(session)) {
             const adapter = new CDPClientAdapter(session);
@@ -39954,12 +42595,12 @@ class CDPConnectionAdapter {
 }
 _CDPConnectionAdapter_cdp = new WeakMap(), _CDPConnectionAdapter_adapters = new WeakMap(), _CDPConnectionAdapter_browser = new WeakMap();
 /**
- * Wrapper on top of CDPSession/CDPConnection to satisify CDP interface that
+ * Wrapper on top of CDPSession/CDPConnection to satisfy CDP interface that
  * BidiServer needs.
  *
  * @internal
  */
-class CDPClientAdapter extends index_js_1.BidiMapper.EventEmitter {
+class CDPClientAdapter extends BidiMapper.EventEmitter {
     constructor(client) {
         super();
         _CDPClientAdapter_closed.set(this, false);
@@ -39995,7 +42636,7 @@ _CDPClientAdapter_closed = new WeakMap(), _CDPClientAdapter_client = new WeakMap
  * to send and receive commands to the BiDiServer.
  * @internal
  */
-class NoOpTransport extends index_js_1.BidiMapper.EventEmitter {
+class NoOpTransport extends BidiMapper.EventEmitter {
     constructor() {
         super(...arguments);
         _NoOpTransport_onMessage.set(this, async (_m) => {
@@ -40068,6 +42709,7 @@ class Browser extends Browser_js_1.Browser {
     static async create(opts) {
         // TODO: await until the connection is established.
         try {
+            // TODO: Add 'session.new' to BiDi types
             (await opts.connection.send('session.new', {}));
         }
         catch { }
@@ -40153,10 +42795,10 @@ class BrowserContext extends BrowserContext_js_1.BrowserContext {
         __classPrivateFieldSet(this, _BrowserContext_connection, connection, "f");
     }
     async newPage() {
-        const result = (await __classPrivateFieldGet(this, _BrowserContext_connection, "f").send('browsingContext.create', {
+        const response = await __classPrivateFieldGet(this, _BrowserContext_connection, "f").send('browsingContext.create', {
             type: 'tab',
-        }));
-        return new Page_js_1.Page(__classPrivateFieldGet(this, _BrowserContext_connection, "f"), result.context);
+        });
+        return new Page_js_1.Page(__classPrivateFieldGet(this, _BrowserContext_connection, "f"), response.result.context);
     }
     async close() { }
 }
@@ -40264,7 +42906,7 @@ class Connection extends EventEmitter_js_1.EventEmitter {
                     callback.reject(createProtocolError(callback.error, callback.method, object));
                 }
                 else {
-                    callback.resolve(object.result);
+                    callback.resolve(object);
                 }
             }
         }
@@ -40295,6 +42937,9 @@ function rewriteError(error, message, originalMessage) {
     error.originalMessage = originalMessage !== null && originalMessage !== void 0 ? originalMessage : error.originalMessage;
     return error;
 }
+/**
+ * @internal
+ */
 function createProtocolError(error, method, object) {
     let message = `Protocol error (${method}): ${object.error} ${object.message}`;
     if (object.stacktrace) {
@@ -40341,6 +42986,8 @@ var _Page_connection, _Page_contextId;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Page = void 0;
 const Page_js_1 = __nccwpck_require__(2194);
+const util_js_1 = __nccwpck_require__(8274);
+const Serializer_js_1 = __nccwpck_require__(3928);
 /**
  * @internal
  */
@@ -40357,20 +43004,243 @@ class Page extends Page_js_1.Page {
             context: __classPrivateFieldGet(this, _Page_contextId, "f"),
         });
     }
-    async evaluate(pageFunction, ..._args) {
-        // TODO: re-use evaluate logic from Execution context.
-        const str = `(${pageFunction.toString()})()`;
-        const result = (await __classPrivateFieldGet(this, _Page_connection, "f").send('script.evaluate', {
-            expression: str,
-            target: { context: __classPrivateFieldGet(this, _Page_contextId, "f") },
-            awaitPromise: true,
-        }));
-        return result.result.value;
+    async evaluate(pageFunction, ...args) {
+        let responsePromise;
+        if ((0, util_js_1.isString)(pageFunction)) {
+            responsePromise = __classPrivateFieldGet(this, _Page_connection, "f").send('script.evaluate', {
+                expression: pageFunction,
+                target: { context: __classPrivateFieldGet(this, _Page_contextId, "f") },
+                awaitPromise: true,
+            });
+        }
+        else {
+            responsePromise = __classPrivateFieldGet(this, _Page_connection, "f").send('script.callFunction', {
+                functionDeclaration: (0, util_js_1.stringifyFunction)(pageFunction),
+                arguments: await Promise.all(args.map(Serializer_js_1.BidiSerializer.serialize)),
+                target: { context: __classPrivateFieldGet(this, _Page_contextId, "f") },
+                awaitPromise: true,
+            });
+        }
+        const { result } = await responsePromise;
+        if ('type' in result && result.type === 'exception') {
+            throw new Error(result.exceptionDetails.text);
+        }
+        return Serializer_js_1.BidiSerializer.deserialize(result.result);
     }
 }
 exports.Page = Page;
 _Page_connection = new WeakMap(), _Page_contextId = new WeakMap();
 //# sourceMappingURL=Page.js.map
+
+/***/ }),
+
+/***/ 3928:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BidiSerializer = void 0;
+const util_js_1 = __nccwpck_require__(8274);
+/**
+ * @internal
+ */
+class UnserializableError extends Error {
+}
+/**
+ * @internal
+ */
+class BidiSerializer {
+    static serializeNumber(arg) {
+        let value;
+        if (Object.is(arg, -0)) {
+            value = '-0';
+        }
+        else if (Object.is(arg, Infinity)) {
+            value = 'Infinity';
+        }
+        else if (Object.is(arg, -Infinity)) {
+            value = '-Infinity';
+        }
+        else if (Object.is(arg, NaN)) {
+            value = 'NaN';
+        }
+        else {
+            value = arg;
+        }
+        return {
+            type: 'number',
+            value,
+        };
+    }
+    static serializeObject(arg) {
+        if (arg === null) {
+            return {
+                type: 'null',
+            };
+        }
+        else if (Array.isArray(arg)) {
+            const parsedArray = arg.map(subArg => {
+                return BidiSerializer.serializeRemoveValue(subArg);
+            });
+            return {
+                type: 'array',
+                value: parsedArray,
+            };
+        }
+        else if ((0, util_js_1.isPlainObject)(arg)) {
+            const parsedObject = [];
+            for (const key in arg) {
+                parsedObject.push([
+                    BidiSerializer.serializeRemoveValue(key),
+                    BidiSerializer.serializeRemoveValue(arg[key]),
+                ]);
+            }
+            return {
+                type: 'object',
+                value: parsedObject,
+            };
+        }
+        else if ((0, util_js_1.isRegExp)(arg)) {
+            return {
+                type: 'regexp',
+                value: {
+                    pattern: arg.source,
+                    flags: arg.flags,
+                },
+            };
+        }
+        else if ((0, util_js_1.isDate)(arg)) {
+            return {
+                type: 'date',
+                value: arg.toISOString(),
+            };
+        }
+        throw new UnserializableError('Custom object sterilization not possible. Use plain objects instead.');
+    }
+    static serializeRemoveValue(arg) {
+        switch (typeof arg) {
+            case 'symbol':
+            case 'function':
+                throw new UnserializableError(`Unable to serializable ${typeof arg}`);
+            case 'object':
+                return BidiSerializer.serializeObject(arg);
+            case 'undefined':
+                return {
+                    type: 'undefined',
+                };
+            case 'number':
+                return BidiSerializer.serializeNumber(arg);
+            case 'bigint':
+                return {
+                    type: 'bigint',
+                    value: arg.toString(),
+                };
+            case 'string':
+                return {
+                    type: 'string',
+                    value: arg,
+                };
+            case 'boolean':
+                return {
+                    type: 'boolean',
+                    value: arg,
+                };
+        }
+    }
+    static serialize(arg) {
+        // TODO: See use case of LazyArgs
+        return BidiSerializer.serializeRemoveValue(arg);
+    }
+    static deserializeNumber(value) {
+        switch (value) {
+            case '-0':
+                return -0;
+            case 'NaN':
+                return NaN;
+            case 'Infinity':
+            case '+Infinity':
+                return Infinity;
+            case '-Infinity':
+                return -Infinity;
+            default:
+                return value;
+        }
+    }
+    static deserializeLocalValue(result) {
+        var _a;
+        switch (result.type) {
+            case 'array':
+                // TODO: Check expected output when value is undefined
+                return (_a = result.value) === null || _a === void 0 ? void 0 : _a.map(value => {
+                    return BidiSerializer.deserializeLocalValue(value);
+                });
+            case 'set':
+                // TODO: Check expected output when value is undefined
+                return result.value.reduce((acc, value) => {
+                    return acc.add(value);
+                }, new Set());
+            case 'object':
+                if (result.value) {
+                    return result.value.reduce((acc, tuple) => {
+                        const { key, value } = BidiSerializer.deserializeTuple(tuple);
+                        acc[key] = value;
+                        return acc;
+                    }, {});
+                }
+                break;
+            case 'map':
+                return result.value.reduce((acc, tuple) => {
+                    const { key, value } = BidiSerializer.deserializeTuple(tuple);
+                    return acc.set(key, value);
+                }, new Map());
+            case 'promise':
+                return {};
+            case 'regexp':
+                return new RegExp(result.value.pattern, result.value.flags);
+            case 'date':
+                return new Date(result.value);
+            case 'undefined':
+                return undefined;
+            case 'null':
+                return null;
+            case 'number':
+                return BidiSerializer.deserializeNumber(result.value);
+            case 'bigint':
+                return BigInt(result.value);
+            case 'boolean':
+                return Boolean(result.value);
+            case 'string':
+                return result.value;
+        }
+        throw new UnserializableError(`Deserialization of type ${result.type} not supported.`);
+    }
+    static deserializeTuple([serializedKey, serializedValue]) {
+        const key = typeof serializedKey === 'string'
+            ? serializedKey
+            : BidiSerializer.deserializeLocalValue(serializedKey);
+        const value = BidiSerializer.deserializeLocalValue(serializedValue);
+        return { key, value };
+    }
+    static deserialize(result) {
+        if (!result) {
+            (0, util_js_1.debugError)('Service did not produce a result.');
+            return undefined;
+        }
+        try {
+            return BidiSerializer.deserializeLocalValue(result);
+        }
+        catch (error) {
+            if (error instanceof UnserializableError) {
+                (0, util_js_1.debugError)(error.message);
+                return undefined;
+            }
+            throw error;
+        }
+    }
+}
+exports.BidiSerializer = BidiSerializer;
+//# sourceMappingURL=Serializer.js.map
 
 /***/ }),
 
@@ -40637,7 +43507,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getReadableFromProtocolStream = exports.getReadableAsBuffer = exports.importFS = exports.waitWithTimeout = exports.pageBindingDeliverErrorValueString = exports.pageBindingDeliverErrorString = exports.pageBindingDeliverResultString = exports.pageBindingInitString = exports.evaluationString = exports.createJSHandle = exports.waitForEvent = exports.isNumber = exports.isString = exports.removeEventListeners = exports.addEventListener = exports.releaseObject = exports.valueFromRemoteObject = exports.getExceptionMessage = exports.debugError = void 0;
+exports.stringifyFunction = exports.getReadableFromProtocolStream = exports.getReadableAsBuffer = exports.importFS = exports.waitWithTimeout = exports.pageBindingDeliverErrorValueString = exports.pageBindingDeliverErrorString = exports.pageBindingDeliverResultString = exports.pageBindingInitString = exports.evaluationString = exports.createJSHandle = exports.waitForEvent = exports.isDate = exports.isRegExp = exports.isPlainObject = exports.isNumber = exports.isString = exports.removeEventListeners = exports.addEventListener = exports.releaseObject = exports.valueFromRemoteObject = exports.getExceptionMessage = exports.debugError = void 0;
 const environment_js_1 = __nccwpck_require__(1577);
 const assert_js_1 = __nccwpck_require__(7729);
 const ErrorLike_js_1 = __nccwpck_require__(2937);
@@ -40748,6 +43618,27 @@ exports.isNumber = isNumber;
 /**
  * @internal
  */
+const isPlainObject = (obj) => {
+    return typeof obj === 'object' && (obj === null || obj === void 0 ? void 0 : obj.constructor) === Object;
+};
+exports.isPlainObject = isPlainObject;
+/**
+ * @internal
+ */
+const isRegExp = (obj) => {
+    return typeof obj === 'object' && (obj === null || obj === void 0 ? void 0 : obj.constructor) === RegExp;
+};
+exports.isRegExp = isRegExp;
+/**
+ * @internal
+ */
+const isDate = (obj) => {
+    return typeof obj === 'object' && (obj === null || obj === void 0 ? void 0 : obj.constructor) === Date;
+};
+exports.isDate = isDate;
+/**
+ * @internal
+ */
 async function waitForEvent(emitter, eventName, predicate, timeout, abortPromise) {
     let eventTimeout;
     let resolveCallback;
@@ -40789,9 +43680,9 @@ exports.waitForEvent = waitForEvent;
  */
 function createJSHandle(context, remoteObject) {
     if (remoteObject.subtype === 'node' && context._world) {
-        return new ElementHandle_js_1.ElementHandle(context, remoteObject, context._world.frame());
+        return new ElementHandle_js_1.CDPElementHandle(context, remoteObject, context._world.frame());
     }
-    return new JSHandle_js_1.JSHandle(context, remoteObject);
+    return new JSHandle_js_1.CDPJSHandle(context, remoteObject);
 }
 exports.createJSHandle = createJSHandle;
 /**
@@ -40976,6 +43867,35 @@ async function getReadableFromProtocolStream(client, handle) {
     });
 }
 exports.getReadableFromProtocolStream = getReadableFromProtocolStream;
+/**
+ * @internal
+ */
+function stringifyFunction(expression) {
+    let functionText = expression.toString();
+    try {
+        new Function('(' + functionText + ')');
+    }
+    catch (error) {
+        // This means we might have a function shorthand. Try another
+        // time prefixing 'function '.
+        if (functionText.startsWith('async ')) {
+            functionText =
+                'async function ' + functionText.substring('async '.length);
+        }
+        else {
+            functionText = 'function ' + functionText;
+        }
+        try {
+            new Function('(' + functionText + ')');
+        }
+        catch (error) {
+            // We tried hard to serialize, but there's a weird beast here.
+            throw new Error('Passed function is not well-serializable!');
+        }
+    }
+    return functionText;
+}
+exports.stringifyFunction = stringifyFunction;
 //# sourceMappingURL=util.js.map
 
 /***/ }),
@@ -41046,7 +43966,7 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '19.5.0';
+exports.packageVersion = '19.7.0';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
@@ -41449,6 +44369,12 @@ class BrowserFetcher {
             url,
             product: __classPrivateFieldGet(this, _BrowserFetcher_product, "f"),
         };
+    }
+    /**
+     * @internal
+     */
+    getDownloadPath() {
+        return __classPrivateFieldGet(this, _BrowserFetcher_downloadPath, "f");
     }
 }
 exports.BrowserFetcher = BrowserFetcher;
@@ -42300,7 +45226,6 @@ const os_1 = __importDefault(__nccwpck_require__(2037));
 const path_1 = __importDefault(__nccwpck_require__(1017));
 const Browser_js_1 = __nccwpck_require__(2087);
 const assert_js_1 = __nccwpck_require__(7729);
-const BrowserFetcher_js_1 = __nccwpck_require__(6573);
 const BrowserRunner_js_1 = __nccwpck_require__(7988);
 const ProductLauncher_js_1 = __nccwpck_require__(9675);
 /**
@@ -42423,13 +45348,13 @@ class FirefoxLauncher extends ProductLauncher_js_1.ProductLauncher {
     executablePath() {
         // replace 'latest' placeholder with actual downloaded revision
         if (this.puppeteer.browserRevision === 'latest') {
-            const browserFetcher = new BrowserFetcher_js_1.BrowserFetcher({
+            const browserFetcher = this.puppeteer.createBrowserFetcher({
                 product: this.product,
                 path: this.puppeteer.defaultDownloadPath,
             });
             const localRevisions = browserFetcher.localRevisions();
             if (localRevisions[0]) {
-                this.puppeteer.configuration.browserRevision = localRevisions[0];
+                this.actualBrowserRevision = localRevisions[0];
             }
         }
         return this.resolveExecutablePath();
@@ -42827,7 +45752,6 @@ exports.ProductLauncher = void 0;
 const fs_1 = __nccwpck_require__(7147);
 const os_1 = __importStar(__nccwpck_require__(2037));
 const path_1 = __nccwpck_require__(1017);
-const BrowserFetcher_js_1 = __nccwpck_require__(6573);
 /**
  * Describes a launcher - a class that is able to create and launch a browser instance.
  *
@@ -42855,6 +45779,14 @@ class ProductLauncher {
         throw new Error('Not implemented');
     }
     /**
+     * Set only for Firefox, after the launcher resolves the `latest` revision to
+     * the actual revision.
+     * @internal
+     */
+    getActualBrowserRevision() {
+        return this.actualBrowserRevision;
+    }
+    /**
      * @internal
      */
     getProfilePath() {
@@ -42879,7 +45811,7 @@ class ProductLauncher {
             (0, fs_1.existsSync)(ubuntuChromiumPath)) {
             return ubuntuChromiumPath;
         }
-        const browserFetcher = new BrowserFetcher_js_1.BrowserFetcher({
+        const browserFetcher = this.puppeteer.createBrowserFetcher({
             product: this.product,
             path: this.puppeteer.defaultDownloadPath,
         });
@@ -43081,8 +46013,8 @@ class PuppeteerNode extends Puppeteer_js_1.Puppeteer {
      * @internal
      */
     get browserRevision() {
-        var _a;
-        return (_a = this.configuration.browserRevision) !== null && _a !== void 0 ? _a : this.defaultBrowserRevision;
+        var _a, _b, _c;
+        return ((_c = (_b = (_a = __classPrivateFieldGet(this, _PuppeteerNode__launcher, "f")) === null || _a === void 0 ? void 0 : _a.getActualBrowserRevision()) !== null && _b !== void 0 ? _b : this.configuration.browserRevision) !== null && _c !== void 0 ? _c : this.defaultBrowserRevision);
     }
     /**
      * @returns The default download path for puppeteer. For puppeteer-core, this
@@ -43147,20 +46079,24 @@ class PuppeteerNode extends Puppeteer_js_1.Puppeteer {
      *
      * @returns A new BrowserFetcher instance.
      */
-    createBrowserFetcher(options) {
+    createBrowserFetcher(options = {}) {
         var _a;
         const downloadPath = this.defaultDownloadPath;
-        if (downloadPath) {
+        if (!options.path && downloadPath) {
             options.path = downloadPath;
         }
         if (!options.path) {
             throw new Error('A `path` must be specified for `puppeteer-core`.');
         }
-        if ((_a = this.configuration.experiments) === null || _a === void 0 ? void 0 : _a.macArmChromiumEnabled) {
+        if (!('useMacOSARMBinary' in options) &&
+            ((_a = this.configuration.experiments) === null || _a === void 0 ? void 0 : _a.macArmChromiumEnabled)) {
             options.useMacOSARMBinary = true;
         }
-        if (this.configuration.downloadHost) {
+        if (!('host' in options) && this.configuration.downloadHost) {
             options.host = this.configuration.downloadHost;
+        }
+        if (!('product' in options) && this.configuration.defaultProduct) {
+            options.product = this.configuration.defaultProduct;
         }
         return new BrowserFetcher_js_1.BrowserFetcher(options);
     }
@@ -43320,7 +46256,7 @@ exports.PUPPETEER_REVISIONS = void 0;
  * @internal
  */
 exports.PUPPETEER_REVISIONS = Object.freeze({
-    chromium: '1069273',
+    chromium: '1095492',
     firefox: 'latest',
 });
 //# sourceMappingURL=revisions.js.map
@@ -43525,2550 +46461,6 @@ __exportStar(__nccwpck_require__(2937), exports);
 
 /***/ }),
 
-/***/ 8208:
-/***/ ((module) => {
-
-"use strict";
-
-
-var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
-
-function getDefaultExportFromCjs (x) {
-	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
-}
-
-var chromiumBidiExports = {};
-var chromiumBidi = {
-  get exports(){ return chromiumBidiExports; },
-  set exports(v){ chromiumBidiExports = v; },
-};
-
-(function (module) {
-
-	var commonjsGlobal$1 = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof commonjsGlobal !== 'undefined' ? commonjsGlobal : typeof self !== 'undefined' ? self : {};
-
-	function getDefaultExportFromCjs (x) {
-		return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
-	}
-
-	var chromiumBidiExports = {};
-	var chromiumBidi = {
-	  get exports(){ return chromiumBidiExports; },
-	  set exports(v){ chromiumBidiExports = v; },
-	};
-
-	(function (module) {
-
-		var commonjsGlobal$1$1 = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof commonjsGlobal$1 !== 'undefined' ? commonjsGlobal$1 : typeof self !== 'undefined' ? self : {};
-
-		function getDefaultExportFromCjs (x) {
-			return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
-		}
-
-		var chromiumBidi = {};
-
-		(function (exports) {
-
-			Object.defineProperty(exports, '__esModule', { value: true });
-
-			function _mergeNamespaces(n, m) {
-				m.forEach(function (e) {
-					e && typeof e !== 'string' && !Array.isArray(e) && Object.keys(e).forEach(function (k) {
-						if (k !== 'default' && !(k in n)) {
-							var d = Object.getOwnPropertyDescriptor(e, k);
-							Object.defineProperty(n, k, d.get ? d : {
-								enumerable: true,
-								get: function () { return e[k]; }
-							});
-						}
-					});
-				});
-				return Object.freeze(n);
-			}
-
-			var commonjsGlobal$1$1$1 = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof commonjsGlobal$1$1 !== 'undefined' ? commonjsGlobal$1$1 : typeof self !== 'undefined' ? self : {};
-
-			function getDefaultExportFromCjs (x) {
-				return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
-			}
-
-			var bidiMapper$2 = {};
-
-			var BidiServer$1 = {};
-
-			var EventEmitter$1 = {};
-
-			var mitt=function(n){return {all:n=n||new Map,on:function(e,t){var i=n.get(e);i?i.push(t):n.set(e,[t]);},off:function(e,t){var i=n.get(e);i&&(t?i.splice(i.indexOf(t)>>>0,1):n.set(e,[]));},emit:function(e,t){var i=n.get(e);i&&i.slice().map(function(n){n(t);}),(i=n.get("*"))&&i.slice().map(function(n){n(e,t);});}}};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			var __importDefault = (commonjsGlobal$1$1$1 && commonjsGlobal$1$1$1.__importDefault) || function (mod) {
-			    return (mod && mod.__esModule) ? mod : { "default": mod };
-			};
-			Object.defineProperty(EventEmitter$1, "__esModule", { value: true });
-			EventEmitter$1.EventEmitter = void 0;
-			const mitt_1 = __importDefault(mitt);
-			class EventEmitter {
-			    #emitter = (0, mitt_1.default)();
-			    on(type, handler) {
-			        this.#emitter.on(type, handler);
-			        return this;
-			    }
-			    /**
-			     * Like `on` but the listener will only be fired once and then it will be removed.
-			     * @param event - the event you'd like to listen to
-			     * @param handler - the handler function to run when the event occurs
-			     * @returns `this` to enable you to chain method calls.
-			     */
-			    once(event, handler) {
-			        const onceHandler = (eventData) => {
-			            handler(eventData);
-			            this.off(event, onceHandler);
-			        };
-			        return this.on(event, onceHandler);
-			    }
-			    off(type, handler) {
-			        this.#emitter.off(type, handler);
-			        return this;
-			    }
-			    /**
-			     * Emits an event and call any associated listeners.
-			     *
-			     * @param event - the event you'd like to emit
-			     * @param eventData - any data you'd like to emit with the event
-			     * @returns `true` if there are any listeners, `false` if there are not.
-			     */
-			    emit(event, eventData) {
-			        this.#emitter.emit(event, eventData);
-			    }
-			}
-			EventEmitter$1.EventEmitter = EventEmitter;
-
-			var processingQueue = {};
-
-			var log = {};
-
-			(function (exports) {
-				/**
-				 * Copyright 2021 Google LLC.
-				 * Copyright (c) Microsoft Corporation.
-				 *
-				 * Licensed under the Apache License, Version 2.0 (the "License");
-				 * you may not use this file except in compliance with the License.
-				 * You may obtain a copy of the License at
-				 *
-				 *     http://www.apache.org/licenses/LICENSE-2.0
-				 *
-				 * Unless required by applicable law or agreed to in writing, software
-				 * distributed under the License is distributed on an "AS IS" BASIS,
-				 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-				 * See the License for the specific language governing permissions and
-				 * limitations under the License.
-				 */
-				Object.defineProperty(exports, "__esModule", { value: true });
-				exports.log = exports.LogType = void 0;
-				(function (LogType) {
-				    LogType["system"] = "System";
-				    LogType["bidi"] = "BiDi Messages";
-				    LogType["browsingContexts"] = "Browsing Contexts";
-				    LogType["cdp"] = "CDP";
-				    LogType["commandParser"] = "Command parser";
-				})(exports.LogType || (exports.LogType = {}));
-				function log(logType) {
-				    return (...messages) => {
-				        console.log(logType, ...messages);
-				        // Add messages to the Mapper Tab Page, if exists.
-				        // Dynamic lookup to avoid circlular dependency.
-				        if ('MapperTabPage' in globalThis) {
-				            globalThis['MapperTabPage'].log(logType, ...messages);
-				        }
-				    };
-				}
-				exports.log = log;
-				
-			} (log));
-
-			Object.defineProperty(processingQueue, "__esModule", { value: true });
-			processingQueue.ProcessingQueue = void 0;
-			const log_js_1$1 = log;
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			const logSystem = (0, log_js_1$1.log)(log_js_1$1.LogType.system);
-			class ProcessingQueue {
-			    #queue = [];
-			    #processor;
-			    #catch;
-			    // Flag to keep only 1 active processor.
-			    #isProcessing = false;
-			    constructor(processor, _catch = () => Promise.resolve()) {
-			        this.#catch = _catch;
-			        this.#processor = processor;
-			    }
-			    add(entry) {
-			        this.#queue.push(entry);
-			        // No need in waiting. Just initialise processor if needed.
-			        // noinspection JSIgnoredPromiseFromCall
-			        this.#processIfNeeded();
-			    }
-			    async #processIfNeeded() {
-			        if (this.#isProcessing) {
-			            return;
-			        }
-			        this.#isProcessing = true;
-			        while (this.#queue.length > 0) {
-			            const entryPromise = this.#queue.shift();
-			            if (entryPromise !== undefined) {
-			                await entryPromise
-			                    .then((entry) => this.#processor(entry))
-			                    .catch((e) => {
-			                    logSystem('Event was not processed:' + e);
-			                    this.#catch(e);
-			                })
-			                    .finally();
-			            }
-			        }
-			        this.#isProcessing = false;
-			    }
-			}
-			processingQueue.ProcessingQueue = ProcessingQueue;
-
-			var EventManager$1 = {};
-
-			var OutgoindBidiMessage = {};
-
-			/**
-			 * Copyright 2021 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(OutgoindBidiMessage, "__esModule", { value: true });
-			OutgoindBidiMessage.OutgoingBidiMessage = void 0;
-			class OutgoingBidiMessage {
-			    #message;
-			    #channel;
-			    constructor(message, channel) {
-			        this.#message = message;
-			        this.#channel = channel;
-			    }
-			    static async createFromPromise(messagePromise, channel) {
-			        const message = await messagePromise;
-			        return new OutgoingBidiMessage(message, channel);
-			    }
-			    static createResolved(message, channel) {
-			        return Promise.resolve(new OutgoingBidiMessage(message, channel));
-			    }
-			    get message() {
-			        return this.#message;
-			    }
-			    get channel() {
-			        return this.#channel;
-			    }
-			}
-			OutgoindBidiMessage.OutgoingBidiMessage = OutgoingBidiMessage;
-
-			var SubscriptionManager$1 = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(SubscriptionManager$1, "__esModule", { value: true });
-			SubscriptionManager$1.SubscriptionManager = void 0;
-			class SubscriptionManager {
-			    #subscriptionPriority = 0;
-			    // BrowsingContext `null` means the event has subscription across all the
-			    // browsing contexts.
-			    // Channel `null` means no `channel` should be added.
-			    #channelToContextToEventMap = new Map();
-			    getChannelsSubscribedToEvent(eventMethod, contextId) {
-			        const prioritiesAndChannels = Array.from(this.#channelToContextToEventMap.keys())
-			            .map((channel) => ({
-			            priority: this.#getEventSubscriptionPriorityForChannel(eventMethod, contextId, channel),
-			            channel,
-			        }))
-			            .filter(({ priority }) => priority !== null);
-			        // Sort channels by priority.
-			        return prioritiesAndChannels
-			            .sort((a, b) => a.priority - b.priority)
-			            .map(({ channel }) => channel);
-			    }
-			    #getEventSubscriptionPriorityForChannel(eventMethod, contextId, channel) {
-			        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
-			        if (contextToEventMap === undefined) {
-			            return null;
-			        }
-			        // Get all the subscription priorities.
-			        let priorities = [
-			            contextToEventMap.get(null)?.get(eventMethod),
-			            contextToEventMap.get(contextId)?.get(eventMethod),
-			        ].filter((p) => p !== undefined);
-			        if (priorities.length === 0) {
-			            // Not subscribed, return null.
-			            return null;
-			        }
-			        // Return minimal priority.
-			        return Math.min(...priorities);
-			    }
-			    subscribe(event, contextId, channel) {
-			        if (!this.#channelToContextToEventMap.has(channel)) {
-			            this.#channelToContextToEventMap.set(channel, new Map());
-			        }
-			        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
-			        if (!contextToEventMap.has(contextId)) {
-			            contextToEventMap.set(contextId, new Map());
-			        }
-			        const eventMap = contextToEventMap.get(contextId);
-			        // Do not re-subscribe to events to keep the priority.
-			        if (eventMap.has(event)) {
-			            return;
-			        }
-			        eventMap.set(event, this.#subscriptionPriority++);
-			    }
-			    unsubscribe(event, contextId, channel) {
-			        if (!this.#channelToContextToEventMap.has(channel)) {
-			            return;
-			        }
-			        const contextToEventMap = this.#channelToContextToEventMap.get(channel);
-			        if (!contextToEventMap.has(contextId)) {
-			            return;
-			        }
-			        const eventMap = contextToEventMap.get(contextId);
-			        eventMap.delete(event);
-			        // Clean up maps if empty.
-			        if (eventMap.size === 0) {
-			            contextToEventMap.delete(event);
-			        }
-			        if (contextToEventMap.size === 0) {
-			            this.#channelToContextToEventMap.delete(channel);
-			        }
-			    }
-			}
-			SubscriptionManager$1.SubscriptionManager = SubscriptionManager;
-
-			var idWrapper = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(idWrapper, "__esModule", { value: true });
-			idWrapper.IdWrapper = void 0;
-			/**
-			 * Creates an object with a positive unique incrementing id.
-			 */
-			class IdWrapper {
-			    static #counter = 0;
-			    #id;
-			    constructor() {
-			        this.#id = ++IdWrapper.#counter;
-			    }
-			    get id() {
-			        return this.#id;
-			    }
-			}
-			idWrapper.IdWrapper = IdWrapper;
-
-			var buffer = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(buffer, "__esModule", { value: true });
-			buffer.Buffer = void 0;
-			/**
-			 * Implements a FIFO buffer with a fixed size.
-			 */
-			class Buffer {
-			    #capacity;
-			    #entries = [];
-			    #onItemRemoved;
-			    /**
-			     * @param capacity
-			     * @param onItemRemoved optional delegate called for each removed element.
-			     */
-			    constructor(capacity, onItemRemoved = () => { }) {
-			        this.#capacity = capacity;
-			        this.#onItemRemoved = onItemRemoved;
-			    }
-			    get() {
-			        return this.#entries;
-			    }
-			    add(value) {
-			        this.#entries.push(value);
-			        while (this.#entries.length > this.#capacity) {
-			            const item = this.#entries.shift();
-			            if (item !== undefined) {
-			                this.#onItemRemoved(item);
-			            }
-			        }
-			    }
-			}
-			buffer.Buffer = Buffer;
-
-			var browsingContextStorage = {};
-
-			var protocol$2 = {};
-
-			(function (exports) {
-				/**
-				 * Copyright 2022 Google LLC.
-				 * Copyright (c) Microsoft Corporation.
-				 *
-				 * Licensed under the Apache License, Version 2.0 (the "License");
-				 * you may not use this file except in compliance with the License.
-				 * You may obtain a copy of the License at
-				 *
-				 *     http://www.apache.org/licenses/LICENSE-2.0
-				 *
-				 * Unless required by applicable law or agreed to in writing, software
-				 * distributed under the License is distributed on an "AS IS" BASIS,
-				 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-				 * See the License for the specific language governing permissions and
-				 * limitations under the License.
-				 */
-				Object.defineProperty(exports, "__esModule", { value: true });
-				exports.CDP = exports.Log = exports.BrowsingContext = exports.Message = void 0;
-				(function (Message) {
-				    class ErrorResponseClass {
-				        constructor(error, message, stacktrace) {
-				            this.error = error;
-				            this.message = message;
-				            this.stacktrace = stacktrace;
-				        }
-				        error;
-				        message;
-				        stacktrace;
-				        toErrorResponse(commandId) {
-				            return {
-				                id: commandId,
-				                error: this.error,
-				                message: this.message,
-				                stacktrace: this.stacktrace,
-				            };
-				        }
-				    }
-				    Message.ErrorResponseClass = ErrorResponseClass;
-				    class UnknownException extends ErrorResponseClass {
-				        constructor(message, stacktrace) {
-				            super('unknown error', message, stacktrace);
-				        }
-				    }
-				    Message.UnknownException = UnknownException;
-				    class UnknownCommandException extends ErrorResponseClass {
-				        constructor(message, stacktrace) {
-				            super('unknown command', message, stacktrace);
-				        }
-				    }
-				    Message.UnknownCommandException = UnknownCommandException;
-				    class InvalidArgumentException extends ErrorResponseClass {
-				        constructor(message, stacktrace) {
-				            super('invalid argument', message, stacktrace);
-				        }
-				    }
-				    Message.InvalidArgumentException = InvalidArgumentException;
-				    class NoSuchFrameException extends ErrorResponseClass {
-				        constructor(message) {
-				            super('no such frame', message);
-				        }
-				    }
-				    Message.NoSuchFrameException = NoSuchFrameException;
-				})(exports.Message || (exports.Message = {}));
-				(function (BrowsingContext) {
-				    (function (EventNames) {
-				        EventNames["LoadEvent"] = "browsingContext.load";
-				        EventNames["DomContentLoadedEvent"] = "browsingContext.domContentLoaded";
-				        EventNames["ContextCreatedEvent"] = "browsingContext.contextCreated";
-				        EventNames["ContextDestroyedEvent"] = "browsingContext.contextDestroyed";
-				    })(BrowsingContext.EventNames || (BrowsingContext.EventNames = {}));
-				})(exports.BrowsingContext || (exports.BrowsingContext = {}));
-				(function (Log) {
-				    (function (EventNames) {
-				        EventNames["LogEntryAddedEvent"] = "log.entryAdded";
-				    })(Log.EventNames || (Log.EventNames = {}));
-				})(exports.Log || (exports.Log = {}));
-				(function (CDP) {
-				    (function (EventNames) {
-				        EventNames["EventReceivedEvent"] = "cdp.eventReceived";
-				    })(CDP.EventNames || (CDP.EventNames = {}));
-				})(exports.CDP || (exports.CDP = {}));
-				
-			} (protocol$2));
-
-			var protocol = /*@__PURE__*/getDefaultExportFromCjs(protocol$2);
-
-			var protocol$1 = /*#__PURE__*/_mergeNamespaces({
-				__proto__: null,
-				'default': protocol
-			}, [protocol$2]);
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(browsingContextStorage, "__esModule", { value: true });
-			browsingContextStorage.BrowsingContextStorage = void 0;
-			const protocol_js_1$5 = protocol$2;
-			class BrowsingContextStorage {
-			    static #contexts = new Map();
-			    static getTopLevelContexts() {
-			        return Array.from(BrowsingContextStorage.#contexts.values()).filter((c) => c.parentId === null);
-			    }
-			    static removeContext(contextId) {
-			        BrowsingContextStorage.#contexts.delete(contextId);
-			    }
-			    static addContext(context) {
-			        BrowsingContextStorage.#contexts.set(context.contextId, context);
-			        if (context.parentId !== null) {
-			            BrowsingContextStorage.getKnownContext(context.parentId).addChild(context);
-			        }
-			    }
-			    static hasKnownContext(contextId) {
-			        return BrowsingContextStorage.#contexts.has(contextId);
-			    }
-			    static findContext(contextId) {
-			        return BrowsingContextStorage.#contexts.get(contextId);
-			    }
-			    static getKnownContext(contextId) {
-			        const result = BrowsingContextStorage.findContext(contextId);
-			        if (result === undefined) {
-			            throw new protocol_js_1$5.Message.NoSuchFrameException(`Context ${contextId} not found`);
-			        }
-			        return result;
-			    }
-			}
-			browsingContextStorage.BrowsingContextStorage = BrowsingContextStorage;
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(EventManager$1, "__esModule", { value: true });
-			EventManager$1.EventManager = void 0;
-			const OutgoindBidiMessage_js_1$1 = OutgoindBidiMessage;
-			const SubscriptionManager_js_1 = SubscriptionManager$1;
-			const idWrapper_js_1 = idWrapper;
-			const buffer_js_1 = buffer;
-			const browsingContextStorage_js_1$3 = browsingContextStorage;
-			class EventWrapper extends idWrapper_js_1.IdWrapper {
-			    #contextId;
-			    #event;
-			    constructor(event, contextId) {
-			        super();
-			        this.#contextId = contextId;
-			        this.#event = event;
-			    }
-			    get contextId() {
-			        return this.#contextId;
-			    }
-			    get event() {
-			        return this.#event;
-			    }
-			}
-			class EventManager {
-			    /**
-			     * Maps event name to a desired buffer length.
-			     */
-			    static #eventBufferLength = new Map([
-			        ['log.entryAdded', 100],
-			    ]);
-			    /**
-			     * Maps event name to a set of contexts where this event already happened.
-			     * Needed for getting buffered events from all the contexts in case of
-			     * subscripting to all contexts.
-			     */
-			    #eventToContextsMap = new Map();
-			    /**
-			     * Maps `eventName` + `browsingContext` to buffer. Used to get buffered events
-			     * during subscription. Channel-agnostic.
-			     */
-			    #eventBuffers = new Map();
-			    /**
-			     * Maps `eventName` + `browsingContext` + `channel` to last sent event id.
-			     * Used to avoid sending duplicated events when user
-			     * subscribes -> unsubscribes -> subscribes.
-			     */
-			    #lastMessageSent = new Map();
-			    #subscriptionManager;
-			    #bidiServer;
-			    constructor(bidiServer) {
-			        this.#bidiServer = bidiServer;
-			        this.#subscriptionManager = new SubscriptionManager_js_1.SubscriptionManager();
-			    }
-			    /**
-			     * Returns consistent key to be used to access value maps.
-			     */
-			    static #getMapKey(eventName, browsingContext, channel = undefined) {
-			        return JSON.stringify({ eventName, browsingContext, channel });
-			    }
-			    async registerEvent(event, contextId) {
-			        await this.registerPromiseEvent(Promise.resolve(event), contextId, event.method);
-			    }
-			    async registerPromiseEvent(event, contextId, eventName) {
-			        const eventWrapper = new EventWrapper(event, contextId);
-			        const sortedChannels = this.#subscriptionManager.getChannelsSubscribedToEvent(eventName, contextId);
-			        this.#bufferEvent(eventWrapper, eventName);
-			        // Send events to channels in the subscription priority.
-			        for (const channel of sortedChannels) {
-			            this.#bidiServer.emitOutgoingMessage(OutgoindBidiMessage_js_1$1.OutgoingBidiMessage.createFromPromise(event, channel));
-			            this.#markEventSent(eventWrapper, channel, eventName);
-			        }
-			    }
-			    async subscribe(eventNames, contextIds, channel) {
-			        for (let eventName of eventNames) {
-			            for (let contextId of contextIds) {
-			                if (contextId !== null &&
-			                    !browsingContextStorage_js_1$3.BrowsingContextStorage.hasKnownContext(contextId)) {
-			                    // Unknown context. Do nothing.
-			                    continue;
-			                }
-			                this.#subscriptionManager.subscribe(eventName, contextId, channel);
-			                for (let eventWrapper of this.#getBufferedEvents(eventName, contextId, channel)) {
-			                    // The order of the events is important.
-			                    this.#bidiServer.emitOutgoingMessage(OutgoindBidiMessage_js_1$1.OutgoingBidiMessage.createFromPromise(eventWrapper.event, channel));
-			                    this.#markEventSent(eventWrapper, channel, eventName);
-			                }
-			            }
-			        }
-			    }
-			    async unsubscribe(events, contextIds, channel) {
-			        for (let event of events) {
-			            for (let contextId of contextIds) {
-			                this.#subscriptionManager.unsubscribe(event, contextId, channel);
-			            }
-			        }
-			    }
-			    /**
-			     * If the event is buffer-able, put it in the buffer.
-			     */
-			    #bufferEvent(eventWrapper, eventName) {
-			        if (!EventManager.#eventBufferLength.has(eventName)) {
-			            // Do nothing if the event is no buffer-able.
-			            return;
-			        }
-			        const bufferMapKey = EventManager.#getMapKey(eventName, eventWrapper.contextId);
-			        if (!this.#eventBuffers.has(bufferMapKey)) {
-			            this.#eventBuffers.set(bufferMapKey, new buffer_js_1.Buffer(EventManager.#eventBufferLength.get(eventName)));
-			        }
-			        this.#eventBuffers.get(bufferMapKey).add(eventWrapper);
-			        // Add the context to the list of contexts having `eventName` events.
-			        if (!this.#eventToContextsMap.has(eventName)) {
-			            this.#eventToContextsMap.set(eventName, new Set());
-			        }
-			        this.#eventToContextsMap.get(eventName).add(eventWrapper.contextId);
-			    }
-			    /**
-			     * If the event is buffer-able, mark it as sent to the given contextId and channel.
-			     */
-			    #markEventSent(eventWrapper, channel, eventName) {
-			        if (!EventManager.#eventBufferLength.has(eventName)) {
-			            // Do nothing if the event is no buffer-able.
-			            return;
-			        }
-			        const lastSentMapKey = EventManager.#getMapKey(eventName, eventWrapper.contextId, channel);
-			        this.#lastMessageSent.set(lastSentMapKey, Math.max(this.#lastMessageSent.get(lastSentMapKey) ?? 0, eventWrapper.id));
-			    }
-			    /**
-			     * Returns events which are buffered and not yet sent to the given channel events.
-			     */
-			    #getBufferedEvents(eventName, contextId, channel) {
-			        const bufferMapKey = EventManager.#getMapKey(eventName, contextId);
-			        const lastSentMapKey = EventManager.#getMapKey(eventName, contextId, channel);
-			        const lastSentMessageId = this.#lastMessageSent.get(lastSentMapKey) ?? -Infinity;
-			        const result = this.#eventBuffers
-			            .get(bufferMapKey)
-			            ?.get()
-			            .filter((wrapper) => wrapper.id > lastSentMessageId) ?? [];
-			        if (contextId === null) {
-			            // For global subscriptions, events buffered in each context should be sent back.
-			            Array.from(this.#eventToContextsMap.get(eventName)?.keys() ?? [])
-			                // Events without context are already in the result.
-			                .filter((_contextId) => _contextId !== null)
-			                .map((_contextId) => this.#getBufferedEvents(eventName, _contextId, channel))
-			                .forEach((events) => result.push(...events));
-			        }
-			        return result.sort((e1, e2) => e1.id - e2.id);
-			    }
-			}
-			EventManager$1.EventManager = EventManager;
-
-			var CommandProcessor$1 = {};
-
-			var browsingContextProcessor = {};
-
-			var browsingContextImpl = {};
-
-			var deferred = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(deferred, "__esModule", { value: true });
-			deferred.Deferred = void 0;
-			class Deferred {
-			    #resolve = () => { };
-			    #reject = () => { };
-			    #promise;
-			    #isFinished = false;
-			    get isFinished() {
-			        return this.#isFinished;
-			    }
-			    constructor() {
-			        this.#promise = new Promise((resolve, reject) => {
-			            this.#resolve = resolve;
-			            this.#reject = reject;
-			        });
-			    }
-			    then(onFulfilled, onRejected) {
-			        return this.#promise.then(onFulfilled, onRejected);
-			    }
-			    catch(onRejected) {
-			        return this.#promise.catch(onRejected);
-			    }
-			    resolve(value) {
-			        this.#isFinished = true;
-			        this.#resolve(value);
-			    }
-			    reject(reason) {
-			        this.#isFinished = true;
-			        this.#reject(reason);
-			    }
-			    finally(onFinally) {
-			        return this.#promise.finally(onFinally);
-			    }
-			    [Symbol.toStringTag] = 'Promise';
-			}
-			deferred.Deferred = Deferred;
-
-			var logManager = {};
-
-			var logHelper = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(logHelper, "__esModule", { value: true });
-			logHelper.getRemoteValuesText = logHelper.logMessageFormatter = void 0;
-			const specifiers = ['%s', '%d', '%i', '%f', '%o', '%O', '%c'];
-			function isFormmatSpecifier(str) {
-			    return specifiers.some((spec) => str.includes(spec));
-			}
-			/**
-			 * @param args input remote values to be format printed
-			 * @returns parsed text of the remote values in specific format
-			 */
-			function logMessageFormatter(args) {
-			    let output = '';
-			    const argFormat = args[0].value.toString();
-			    const argValues = args.slice(1, undefined);
-			    const tokens = argFormat.split(new RegExp(specifiers.map((spec) => '(' + spec + ')').join('|'), 'g'));
-			    for (const token of tokens) {
-			        if (token === undefined || token == '') {
-			            continue;
-			        }
-			        if (isFormmatSpecifier(token)) {
-			            const arg = argValues.shift();
-			            // raise an exception when less value is provided
-			            if (arg === undefined) {
-			                throw new Error('Less value is provided: "' + getRemoteValuesText(args, false) + '"');
-			            }
-			            if (token === '%s') {
-			                output += stringFromArg(arg);
-			            }
-			            else if (token === '%d' || token === '%i') {
-			                if (arg.type === 'bigint' ||
-			                    arg.type === 'number' ||
-			                    arg.type === 'string') {
-			                    output += parseInt(arg.value.toString(), 10);
-			                }
-			                else {
-			                    output += 'NaN';
-			                }
-			            }
-			            else if (token === '%f') {
-			                if (arg.type === 'bigint' ||
-			                    arg.type === 'number' ||
-			                    arg.type === 'string') {
-			                    output += parseFloat(arg.value.toString());
-			                }
-			                else {
-			                    output += 'NaN';
-			                }
-			            }
-			            else {
-			                // %o, %O, %c
-			                output += toJson(arg);
-			            }
-			        }
-			        else {
-			            output += token;
-			        }
-			    }
-			    // raise an exception when more value is provided
-			    if (argValues.length > 0) {
-			        throw new Error('More value is provided: "' + getRemoteValuesText(args, false) + '"');
-			    }
-			    return output;
-			}
-			logHelper.logMessageFormatter = logMessageFormatter;
-			/**
-			 * @param arg input remote value to be parsed
-			 * @returns parsed text of the remote value
-			 *
-			 * input: {"type": "number", "value": 1}
-			 * output: 1
-			 *
-			 * input: {"type": "string", "value": "abc"}
-			 * output: "abc"
-			 *
-			 * input: {"type": "object",  "value": [["id", {"type": "number", "value": 1}]]}
-			 * output: '{"id": 1}'
-			 *
-			 * input: {"type": "object", "value": [["font-size", {"type": "string", "value": "20px"}]]}
-			 * output: '{"font-size": "20px"}'
-			 */
-			function toJson(arg) {
-			    // arg type validation
-			    if (arg.type !== 'array' &&
-			        arg.type !== 'bigint' &&
-			        arg.type !== 'date' &&
-			        arg.type !== 'number' &&
-			        arg.type !== 'object' &&
-			        arg.type !== 'string') {
-			        return stringFromArg(arg);
-			    }
-			    if (arg.type === 'bigint') {
-			        return arg.value.toString() + 'n';
-			    }
-			    if (arg.type === 'number') {
-			        return arg.value.toString();
-			    }
-			    if (['date', 'string'].includes(arg.type)) {
-			        return JSON.stringify(arg.value);
-			    }
-			    if (arg.type === 'object') {
-			        return ('{' +
-			            arg.value
-			                .map((pair) => {
-			                return `${JSON.stringify(pair[0])}:${toJson(pair[1])}`;
-			            })
-			                .join(',') +
-			            '}');
-			    }
-			    if (arg.type === 'array') {
-			        return '[' + arg.value.map((val) => toJson(val)).join(',') + ']';
-			    }
-			    throw Error('Invalid value type: ' + arg.toString());
-			}
-			function stringFromArg(arg) {
-			    if (!arg.hasOwnProperty('value')) {
-			        return arg.type;
-			    }
-			    switch (arg.type) {
-			        case 'string':
-			        case 'number':
-			        case 'boolean':
-			        case 'bigint':
-			            return String(arg.value);
-			        case 'regexp':
-			            return `/${arg.value.pattern}/${arg.value.flags}`;
-			        case 'date':
-			            return new Date(arg.value).toString();
-			        case 'object':
-			            return `Object(${arg.value?.length})`;
-			        case 'array':
-			            return `Array(${arg.value?.length})`;
-			        case 'map':
-			            return `Map(${arg.value.length})`;
-			        case 'set':
-			            return `Set(${arg.value.length})`;
-			        case 'node':
-			            return 'node';
-			        default:
-			            return arg.type;
-			    }
-			}
-			function getRemoteValuesText(args, formatText) {
-			    const arg = args[0];
-			    if (!arg) {
-			        return '';
-			    }
-			    // if args[0] is a format specifier, format the args as output
-			    if (arg.type === 'string' &&
-			        isFormmatSpecifier(arg.value.toString()) &&
-			        formatText) {
-			        return logMessageFormatter(args);
-			    }
-			    // if args[0] is not a format specifier, just join the args with \u0020
-			    return args
-			        .map((arg) => {
-			        return stringFromArg(arg);
-			    })
-			        .join('\u0020');
-			}
-			logHelper.getRemoteValuesText = getRemoteValuesText;
-
-			var realm = {};
-
-			var scriptEvaluator = {};
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(scriptEvaluator, "__esModule", { value: true });
-			scriptEvaluator.ScriptEvaluator = void 0;
-			const protocol_js_1$4 = protocol$2;
-			class ScriptEvaluator {
-			    // As `script.evaluate` wraps call into serialization script, `lineNumber`
-			    // should be adjusted.
-			    static #evaluateStacktraceLineOffset = 0;
-			    static #callFunctionStacktraceLineOffset = 1;
-			    // Keeps track of `handle`s and their realms sent to client.
-			    static #knownHandlesToRealm = new Map();
-			    /**
-			     * Serializes a given CDP object into BiDi, keeping references in the
-			     * target's `globalThis`.
-			     * @param cdpRemoteObject CDP remote object to be serialized.
-			     * @param resultOwnership indicates desired OwnershipModel.
-			     * @param realm
-			     */
-			    static async serializeCdpObject(cdpRemoteObject, resultOwnership, realm) {
-			        const arg = this.#cdpRemoteObjectToCallArgument(cdpRemoteObject);
-			        const cdpWebDriverValue = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			            functionDeclaration: String((obj) => obj),
-			            awaitPromise: false,
-			            arguments: [arg],
-			            generateWebDriverValue: true,
-			            executionContextId: realm.executionContextId,
-			        });
-			        return await this.#cdpToBidiValue(cdpWebDriverValue, realm, resultOwnership);
-			    }
-			    static #cdpRemoteObjectToCallArgument(cdpRemoteObject) {
-			        if (cdpRemoteObject.objectId !== undefined) {
-			            return { objectId: cdpRemoteObject.objectId };
-			        }
-			        if (cdpRemoteObject.unserializableValue !== undefined) {
-			            return { unserializableValue: cdpRemoteObject.unserializableValue };
-			        }
-			        return { value: cdpRemoteObject.value };
-			    }
-			    /**
-			     * Gets the string representation of an object. This is equivalent to
-			     * calling toString() on the object value.
-			     * @param cdpObject CDP remote object representing an object.
-			     * @param realm
-			     * @returns string The stringified object.
-			     */
-			    static async stringifyObject(cdpObject, realm) {
-			        let stringifyResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			            functionDeclaration: String(function (obj) {
-			                return String(obj);
-			            }),
-			            awaitPromise: false,
-			            arguments: [cdpObject],
-			            returnByValue: true,
-			            executionContextId: realm.executionContextId,
-			        });
-			        return stringifyResult.result.value;
-			    }
-			    static async callFunction(realm, functionDeclaration, _this, _arguments, awaitPromise, resultOwnership) {
-			        const callFunctionAndSerializeScript = `(...args)=>{ return _callFunction((\n${functionDeclaration}\n), args);
-      function _callFunction(f, args) {
-        const deserializedThis = args.shift();
-        const deserializedArgs = args;
-        return f.apply(deserializedThis, deserializedArgs);
-      }}`;
-			        const thisAndArgumentsList = [
-			            await this.#deserializeToCdpArg(_this, realm),
-			        ];
-			        thisAndArgumentsList.push(...(await Promise.all(_arguments.map(async (a) => {
-			            return await this.#deserializeToCdpArg(a, realm);
-			        }))));
-			        let cdpCallFunctionResult;
-			        try {
-			            cdpCallFunctionResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			                functionDeclaration: callFunctionAndSerializeScript,
-			                awaitPromise,
-			                arguments: thisAndArgumentsList,
-			                generateWebDriverValue: true,
-			                executionContextId: realm.executionContextId,
-			            });
-			        }
-			        catch (e) {
-			            // Heuristic to determine if the problem is in the argument.
-			            // The check can be done on the `deserialization` step, but this approach
-			            // helps to save round-trips.
-			            if (e.code === -32000 &&
-			                [
-			                    'Could not find object with given id',
-			                    'Argument should belong to the same JavaScript world as target object',
-			                ].includes(e.message)) {
-			                throw new protocol_js_1$4.Message.InvalidArgumentException('Handle was not found.');
-			            }
-			            throw e;
-			        }
-			        if (cdpCallFunctionResult.exceptionDetails) {
-			            // Serialize exception details.
-			            return {
-			                exceptionDetails: await this.#serializeCdpExceptionDetails(cdpCallFunctionResult.exceptionDetails, this.#callFunctionStacktraceLineOffset, resultOwnership, realm),
-			                type: 'exception',
-			                realm: realm.realmId,
-			            };
-			        }
-			        return {
-			            type: 'success',
-			            result: await ScriptEvaluator.#cdpToBidiValue(cdpCallFunctionResult, realm, resultOwnership),
-			            realm: realm.realmId,
-			        };
-			    }
-			    static realmDestroyed(realm) {
-			        return Array.from(this.#knownHandlesToRealm.entries())
-			            .filter(([, r]) => r === realm.realmId)
-			            .map(([h]) => this.#knownHandlesToRealm.delete(h));
-			    }
-			    static async disown(realm, handle) {
-			        // Disowning an object from different realm does nothing.
-			        if (ScriptEvaluator.#knownHandlesToRealm.get(handle) !== realm.realmId) {
-			            return;
-			        }
-			        try {
-			            await realm.cdpClient.sendCommand('Runtime.releaseObject', {
-			                objectId: handle,
-			            });
-			        }
-			        catch (e) {
-			            // Heuristic to determine if the problem is in the unknown handler.
-			            // Ignore the error if so.
-			            if (!(e.code === -32000 && e.message === 'Invalid remote object id')) {
-			                throw e;
-			            }
-			        }
-			        this.#knownHandlesToRealm.delete(handle);
-			    }
-			    static async #serializeCdpExceptionDetails(cdpExceptionDetails, lineOffset, resultOwnership, realm) {
-			        const callFrames = cdpExceptionDetails.stackTrace?.callFrames.map((frame) => ({
-			            url: frame.url,
-			            functionName: frame.functionName,
-			            // As `script.evaluate` wraps call into serialization script, so
-			            // `lineNumber` should be adjusted.
-			            lineNumber: frame.lineNumber - lineOffset,
-			            columnNumber: frame.columnNumber,
-			        }));
-			        const exception = await this.serializeCdpObject(
-			        // Exception should always be there.
-			        cdpExceptionDetails.exception, resultOwnership, realm);
-			        const text = await this.stringifyObject(cdpExceptionDetails.exception, realm);
-			        return {
-			            exception,
-			            columnNumber: cdpExceptionDetails.columnNumber,
-			            // As `script.evaluate` wraps call into serialization script, so
-			            // `lineNumber` should be adjusted.
-			            lineNumber: cdpExceptionDetails.lineNumber - lineOffset,
-			            stackTrace: {
-			                callFrames: callFrames || [],
-			            },
-			            text: text || cdpExceptionDetails.text,
-			        };
-			    }
-			    static async #cdpToBidiValue(cdpValue, realm, resultOwnership) {
-			        // This relies on the CDP to implement proper BiDi serialization, except
-			        // objectIds+handles.
-			        const cdpWebDriverValue = cdpValue.result.webDriverValue;
-			        if (!cdpValue.result.objectId) {
-			            return cdpWebDriverValue;
-			        }
-			        const objectId = cdpValue.result.objectId;
-			        const bidiValue = cdpWebDriverValue;
-			        if (resultOwnership === 'root') {
-			            bidiValue.handle = objectId;
-			            // Remember all the handles sent to client.
-			            this.#knownHandlesToRealm.set(objectId, realm.realmId);
-			        }
-			        else {
-			            await realm.cdpClient.sendCommand('Runtime.releaseObject', { objectId });
-			        }
-			        return bidiValue;
-			    }
-			    static async scriptEvaluate(realm, expression, awaitPromise, resultOwnership) {
-			        let cdpEvaluateResult = await realm.cdpClient.sendCommand('Runtime.evaluate', {
-			            contextId: realm.executionContextId,
-			            expression,
-			            awaitPromise,
-			            generateWebDriverValue: true,
-			        });
-			        if (cdpEvaluateResult.exceptionDetails) {
-			            // Serialize exception details.
-			            return {
-			                exceptionDetails: await this.#serializeCdpExceptionDetails(cdpEvaluateResult.exceptionDetails, this.#evaluateStacktraceLineOffset, resultOwnership, realm),
-			                type: 'exception',
-			                realm: realm.realmId,
-			            };
-			        }
-			        return {
-			            type: 'success',
-			            result: await ScriptEvaluator.#cdpToBidiValue(cdpEvaluateResult, realm, resultOwnership),
-			            realm: realm.realmId,
-			        };
-			    }
-			    static async #deserializeToCdpArg(argumentValue, realm) {
-			        if ('handle' in argumentValue) {
-			            return { objectId: argumentValue.handle };
-			        }
-			        switch (argumentValue.type) {
-			            // Primitive Protocol Value
-			            // https://w3c.github.io/webdriver-bidi/#data-types-protocolValue-primitiveProtocolValue
-			            case 'undefined': {
-			                return { unserializableValue: 'undefined' };
-			            }
-			            case 'null': {
-			                return { unserializableValue: 'null' };
-			            }
-			            case 'string': {
-			                return { value: argumentValue.value };
-			            }
-			            case 'number': {
-			                if (argumentValue.value === 'NaN') {
-			                    return { unserializableValue: 'NaN' };
-			                }
-			                else if (argumentValue.value === '-0') {
-			                    return { unserializableValue: '-0' };
-			                }
-			                else if (argumentValue.value === '+Infinity') {
-			                    return { unserializableValue: '+Infinity' };
-			                }
-			                else if (argumentValue.value === 'Infinity') {
-			                    return { unserializableValue: 'Infinity' };
-			                }
-			                else if (argumentValue.value === '-Infinity') {
-			                    return { unserializableValue: '-Infinity' };
-			                }
-			                else {
-			                    return {
-			                        value: argumentValue.value,
-			                    };
-			                }
-			            }
-			            case 'boolean': {
-			                return { value: !!argumentValue.value };
-			            }
-			            case 'bigint': {
-			                return {
-			                    unserializableValue: `BigInt(${JSON.stringify(argumentValue.value)})`,
-			                };
-			            }
-			            // Local Value
-			            // https://w3c.github.io/webdriver-bidi/#data-types-protocolValue-LocalValue
-			            case 'date': {
-			                return {
-			                    unserializableValue: `new Date(Date.parse(${JSON.stringify(argumentValue.value)}))`,
-			                };
-			            }
-			            case 'regexp': {
-			                return {
-			                    unserializableValue: `new RegExp(${JSON.stringify(argumentValue.value.pattern)}, ${JSON.stringify(argumentValue.value.flags)})`,
-			                };
-			            }
-			            case 'map': {
-			                // TODO(sadym): if non of the nested keys and values has remote
-			                //  reference, serialize to `unserializableValue` without CDP roundtrip.
-			                const keyValueArray = await this.#flattenKeyValuePairs(argumentValue.value, realm);
-			                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			                    functionDeclaration: String(function (...args) {
-			                        const result = new Map();
-			                        for (let i = 0; i < args.length; i += 2) {
-			                            result.set(args[i], args[i + 1]);
-			                        }
-			                        return result;
-			                    }),
-			                    awaitPromise: false,
-			                    arguments: keyValueArray,
-			                    returnByValue: false,
-			                    executionContextId: realm.executionContextId,
-			                });
-			                // TODO(sadym): dispose nested objects.
-			                return { objectId: argEvalResult.result.objectId };
-			            }
-			            case 'object': {
-			                // TODO(sadym): if non of the nested keys and values has remote
-			                //  reference, serialize to `unserializableValue` without CDP roundtrip.
-			                const keyValueArray = await this.#flattenKeyValuePairs(argumentValue.value, realm);
-			                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			                    functionDeclaration: String(function (...args) {
-			                        const result = {};
-			                        for (let i = 0; i < args.length; i += 2) {
-			                            // Key should be either `string`, `number`, or `symbol`.
-			                            const key = args[i];
-			                            result[key] = args[i + 1];
-			                        }
-			                        return result;
-			                    }),
-			                    awaitPromise: false,
-			                    arguments: keyValueArray,
-			                    returnByValue: false,
-			                    executionContextId: realm.executionContextId,
-			                });
-			                // TODO(sadym): dispose nested objects.
-			                return { objectId: argEvalResult.result.objectId };
-			            }
-			            case 'array': {
-			                // TODO(sadym): if non of the nested items has remote reference,
-			                //  serialize to `unserializableValue` without CDP roundtrip.
-			                const args = await ScriptEvaluator.#flattenValueList(argumentValue.value, realm);
-			                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			                    functionDeclaration: String(function (...args) {
-			                        return args;
-			                    }),
-			                    awaitPromise: false,
-			                    arguments: args,
-			                    returnByValue: false,
-			                    executionContextId: realm.executionContextId,
-			                });
-			                // TODO(sadym): dispose nested objects.
-			                return { objectId: argEvalResult.result.objectId };
-			            }
-			            case 'set': {
-			                // TODO(sadym): if non of the nested items has remote reference,
-			                //  serialize to `unserializableValue` without CDP roundtrip.
-			                const args = await this.#flattenValueList(argumentValue.value, realm);
-			                let argEvalResult = await realm.cdpClient.sendCommand('Runtime.callFunctionOn', {
-			                    functionDeclaration: String(function (...args) {
-			                        return new Set(args);
-			                    }),
-			                    awaitPromise: false,
-			                    arguments: args,
-			                    returnByValue: false,
-			                    executionContextId: realm.executionContextId,
-			                });
-			                return { objectId: argEvalResult.result.objectId };
-			            }
-			            // TODO(sadym): dispose nested objects.
-			            default:
-			                throw new Error(`Value ${JSON.stringify(argumentValue)} is not deserializable.`);
-			        }
-			    }
-			    static async #flattenKeyValuePairs(value, realm) {
-			        const keyValueArray = [];
-			        for (let pair of value) {
-			            const key = pair[0];
-			            const value = pair[1];
-			            let keyArg, valueArg;
-			            if (typeof key === 'string') {
-			                // Key is a string.
-			                keyArg = { value: key };
-			            }
-			            else {
-			                // Key is a serialized value.
-			                keyArg = await this.#deserializeToCdpArg(key, realm);
-			            }
-			            valueArg = await this.#deserializeToCdpArg(value, realm);
-			            keyValueArray.push(keyArg);
-			            keyValueArray.push(valueArg);
-			        }
-			        return keyValueArray;
-			    }
-			    static async #flattenValueList(list, realm) {
-			        const result = [];
-			        for (let value of list) {
-			            result.push(await this.#deserializeToCdpArg(value, realm));
-			        }
-			        return result;
-			    }
-			}
-			scriptEvaluator.ScriptEvaluator = ScriptEvaluator;
-
-			(function (exports) {
-				/**
-				 * Copyright 2022 Google LLC.
-				 * Copyright (c) Microsoft Corporation.
-				 *
-				 * Licensed under the Apache License, Version 2.0 (the "License");
-				 * you may not use this file except in compliance with the License.
-				 * You may obtain a copy of the License at
-				 *
-				 *     http://www.apache.org/licenses/LICENSE-2.0
-				 *
-				 * Unless required by applicable law or agreed to in writing, software
-				 * distributed under the License is distributed on an "AS IS" BASIS,
-				 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-				 * See the License for the specific language governing permissions and
-				 * limitations under the License.
-				 */
-				Object.defineProperty(exports, "__esModule", { value: true });
-				exports.Realm = exports.RealmType = void 0;
-				const protocol_js_1 = protocol$2;
-				const scriptEvaluator_js_1 = scriptEvaluator;
-				const browsingContextStorage_js_1 = browsingContextStorage;
-				(function (RealmType) {
-				    RealmType["window"] = "window";
-				})(exports.RealmType || (exports.RealmType = {}));
-				class Realm {
-				    static #realmMap = new Map();
-				    static create(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient) {
-				        const realm = new Realm(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient);
-				        Realm.#realmMap.set(realm.realmId, realm);
-				        return realm;
-				    }
-				    static findRealms(filter = {}) {
-				        return Array.from(Realm.#realmMap.values()).filter((realm) => {
-				            if (filter.realmId !== undefined && filter.realmId !== realm.realmId) {
-				                return false;
-				            }
-				            if (filter.browsingContextId !== undefined &&
-				                filter.browsingContextId !== realm.browsingContextId) {
-				                return false;
-				            }
-				            if (filter.executionContextId !== undefined &&
-				                filter.executionContextId !== realm.executionContextId) {
-				                return false;
-				            }
-				            if (filter.type !== undefined && filter.type !== realm.type) {
-				                return false;
-				            }
-				            if (filter.sandbox !== undefined && filter.sandbox !== realm.#sandbox) {
-				                return false;
-				            }
-				            if (filter.cdpSessionId !== undefined &&
-				                filter.cdpSessionId !== realm.#cdpSessionId) {
-				                return false;
-				            }
-				            return true;
-				        });
-				    }
-				    static findRealm(filter) {
-				        const maybeRealms = Realm.findRealms(filter);
-				        if (maybeRealms.length !== 1) {
-				            return undefined;
-				        }
-				        return maybeRealms[0];
-				    }
-				    static getRealm(filter) {
-				        const maybeRealm = Realm.findRealm(filter);
-				        if (maybeRealm === undefined) {
-				            throw new protocol_js_1.Message.NoSuchFrameException(`Realm ${JSON.stringify(filter)} not found`);
-				        }
-				        return maybeRealm;
-				    }
-				    static clearBrowsingContext(browsingContextId) {
-				        Realm.findRealms({ browsingContextId }).map((realm) => realm.delete());
-				    }
-				    delete() {
-				        Realm.#realmMap.delete(this.realmId);
-				        scriptEvaluator_js_1.ScriptEvaluator.realmDestroyed(this);
-				    }
-				    #realmId;
-				    #browsingContextId;
-				    #executionContextId;
-				    #origin;
-				    #type;
-				    #sandbox;
-				    #cdpSessionId;
-				    #cdpClient;
-				    constructor(realmId, browsingContextId, executionContextId, origin, type, sandbox, cdpSessionId, cdpClient) {
-				        this.#realmId = realmId;
-				        this.#browsingContextId = browsingContextId;
-				        this.#executionContextId = executionContextId;
-				        this.#sandbox = sandbox;
-				        this.#origin = origin;
-				        this.#type = type;
-				        this.#cdpSessionId = cdpSessionId;
-				        this.#cdpClient = cdpClient;
-				    }
-				    toBiDi() {
-				        return {
-				            realm: this.realmId,
-				            origin: this.origin,
-				            type: this.type,
-				            context: this.browsingContextId,
-				            ...(this.#sandbox !== undefined ? { sandbox: this.#sandbox } : {}),
-				        };
-				    }
-				    get realmId() {
-				        return this.#realmId;
-				    }
-				    get browsingContextId() {
-				        return this.#browsingContextId;
-				    }
-				    get executionContextId() {
-				        return this.#executionContextId;
-				    }
-				    get origin() {
-				        return this.#origin;
-				    }
-				    get type() {
-				        return this.#type;
-				    }
-				    get cdpClient() {
-				        return this.#cdpClient;
-				    }
-				    async callFunction(functionDeclaration, _this, _arguments, awaitPromise, resultOwnership) {
-				        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(this.browsingContextId);
-				        await context.awaitUnblocked();
-				        return {
-				            result: await scriptEvaluator_js_1.ScriptEvaluator.callFunction(this, functionDeclaration, _this, _arguments, awaitPromise, resultOwnership),
-				        };
-				    }
-				    async scriptEvaluate(expression, awaitPromise, resultOwnership) {
-				        const context = browsingContextStorage_js_1.BrowsingContextStorage.getKnownContext(this.browsingContextId);
-				        await context.awaitUnblocked();
-				        return {
-				            result: await scriptEvaluator_js_1.ScriptEvaluator.scriptEvaluate(this, expression, awaitPromise, resultOwnership),
-				        };
-				    }
-				    async disown(handle) {
-				        await scriptEvaluator_js_1.ScriptEvaluator.disown(this, handle);
-				    }
-				    /**
-				     * Serializes a given CDP object into BiDi, keeping references in the
-				     * target's `globalThis`.
-				     * @param cdpObject CDP remote object to be serialized.
-				     * @param resultOwnership indicates desired OwnershipModel.
-				     */
-				    async serializeCdpObject(cdpObject, resultOwnership) {
-				        return await scriptEvaluator_js_1.ScriptEvaluator.serializeCdpObject(cdpObject, resultOwnership, this);
-				    }
-				    /**
-				     * Gets the string representation of an object. This is equivalent to
-				     * calling toString() on the object value.
-				     * @param cdpObject CDP remote object representing an object.
-				     * @param realm
-				     * @returns string The stringified object.
-				     */
-				    async stringifyObject(cdpObject) {
-				        return scriptEvaluator_js_1.ScriptEvaluator.stringifyObject(cdpObject, this);
-				    }
-				}
-				exports.Realm = Realm;
-				
-			} (realm));
-
-			/**
-			 * Copyright 2021 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(logManager, "__esModule", { value: true });
-			logManager.LogManager = void 0;
-			const protocol_js_1$3 = protocol$2;
-			const logHelper_js_1 = logHelper;
-			const realm_js_1$2 = realm;
-			class LogManager {
-			    #cdpClient;
-			    #cdpSessionId;
-			    #eventManager;
-			    constructor(cdpClient, cdpSessionId, eventManager) {
-			        this.#cdpSessionId = cdpSessionId;
-			        this.#cdpClient = cdpClient;
-			        this.#eventManager = eventManager;
-			    }
-			    static create(cdpClient, cdpSessionId, eventManager) {
-			        const logManager = new LogManager(cdpClient, cdpSessionId, eventManager);
-			        logManager.#initialize();
-			        return logManager;
-			    }
-			    #initialize() {
-			        this.#initializeEventListeners();
-			    }
-			    #initializeEventListeners() {
-			        this.#initializeLogEntryAddedEventListener();
-			    }
-			    #initializeLogEntryAddedEventListener() {
-			        this.#cdpClient.on('Runtime.consoleAPICalled', (params) => {
-			            // Try to find realm by `cdpSessionId` and `executionContextId`,
-			            // if provided.
-			            const realm = realm_js_1$2.Realm.findRealm({
-			                cdpSessionId: this.#cdpSessionId,
-			                executionContextId: params.executionContextId,
-			            });
-			            const argsPromise = realm === undefined
-			                ? Promise.resolve(params.args)
-			                : // Properly serialize arguments if possible.
-			                    Promise.all(params.args.map(async (arg) => {
-			                        return realm.serializeCdpObject(arg, 'none');
-			                    }));
-			            // No need in waiting for the result, just register the event promise.
-			            // noinspection JSIgnoredPromiseFromCall
-			            this.#eventManager.registerPromiseEvent(argsPromise.then((args) => ({
-			                method: protocol_js_1$3.Log.EventNames.LogEntryAddedEvent,
-			                params: {
-			                    level: LogManager.#getLogLevel(params.type),
-			                    source: {
-			                        realm: realm?.realmId ?? 'UNKNOWN',
-			                        context: realm?.browsingContextId ?? 'UNKNOWN',
-			                    },
-			                    text: (0, logHelper_js_1.getRemoteValuesText)(args, true),
-			                    timestamp: Math.round(params.timestamp),
-			                    stackTrace: LogManager.#getBidiStackTrace(params.stackTrace),
-			                    type: 'console',
-			                    // Console method is `warn`, not `warning`.
-			                    method: params.type === 'warning' ? 'warn' : params.type,
-			                    args,
-			                },
-			            })), realm?.browsingContextId ?? 'UNKNOWN', protocol_js_1$3.Log.EventNames.LogEntryAddedEvent);
-			        });
-			        this.#cdpClient.on('Runtime.exceptionThrown', (params) => {
-			            // Try to find realm by `cdpSessionId` and `executionContextId`,
-			            // if provided.
-			            const realm = realm_js_1$2.Realm.findRealm({
-			                cdpSessionId: this.#cdpSessionId,
-			                executionContextId: params.exceptionDetails.executionContextId,
-			            });
-			            // Try all the best to get the exception text.
-			            const textPromise = (async () => {
-			                if (!params.exceptionDetails.exception) {
-			                    return params.exceptionDetails.text;
-			                }
-			                if (realm === undefined) {
-			                    return JSON.stringify(params.exceptionDetails.exception);
-			                }
-			                return await realm.stringifyObject(params.exceptionDetails.exception);
-			            })();
-			            // No need in waiting for the result, just register the event promise.
-			            // noinspection JSIgnoredPromiseFromCall
-			            this.#eventManager.registerPromiseEvent(textPromise.then((text) => ({
-			                method: protocol_js_1$3.Log.EventNames.LogEntryAddedEvent,
-			                params: {
-			                    level: 'error',
-			                    source: {
-			                        realm: realm?.realmId ?? 'UNKNOWN',
-			                        context: realm?.browsingContextId ?? 'UNKNOWN',
-			                    },
-			                    text,
-			                    timestamp: Math.round(params.timestamp),
-			                    stackTrace: LogManager.#getBidiStackTrace(params.exceptionDetails.stackTrace),
-			                    type: 'javascript',
-			                },
-			            })), realm?.browsingContextId ?? 'UNKNOWN', protocol_js_1$3.Log.EventNames.LogEntryAddedEvent);
-			        });
-			    }
-			    static #getLogLevel(consoleApiType) {
-			        if (['assert', 'error'].includes(consoleApiType)) {
-			            return 'error';
-			        }
-			        if (['debug', 'trace'].includes(consoleApiType)) {
-			            return 'debug';
-			        }
-			        if (['warn', 'warning'].includes(consoleApiType)) {
-			            return 'warn';
-			        }
-			        return 'info';
-			    }
-			    // convert CDP StackTrace object to Bidi StackTrace object
-			    static #getBidiStackTrace(cdpStackTrace) {
-			        const stackFrames = cdpStackTrace?.callFrames.map((callFrame) => {
-			            return {
-			                columnNumber: callFrame.columnNumber,
-			                functionName: callFrame.functionName,
-			                lineNumber: callFrame.lineNumber,
-			                url: callFrame.url,
-			            };
-			        });
-			        return stackFrames ? { callFrames: stackFrames } : undefined;
-			    }
-			}
-			logManager.LogManager = LogManager;
-
-			/**
-			 * Copyright 2022 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(browsingContextImpl, "__esModule", { value: true });
-			browsingContextImpl.BrowsingContextImpl = void 0;
-			const protocol_js_1$2 = protocol$2;
-			const deferred_js_1 = deferred;
-			const logManager_js_1 = logManager;
-			const realm_js_1$1 = realm;
-			const browsingContextStorage_js_1$2 = browsingContextStorage;
-			class BrowsingContextImpl {
-			    #targetDefers = {
-			        documentInitialized: new deferred_js_1.Deferred(),
-			        targetUnblocked: new deferred_js_1.Deferred(),
-			        Page: {
-			            navigatedWithinDocument: new deferred_js_1.Deferred(),
-			            lifecycleEvent: {
-			                DOMContentLoaded: new deferred_js_1.Deferred(),
-			                load: new deferred_js_1.Deferred(),
-			            },
-			        },
-			    };
-			    #contextId;
-			    #parentId;
-			    #cdpBrowserContextId;
-			    #eventManager;
-			    #children = new Map();
-			    #url = 'about:blank';
-			    #loaderId = null;
-			    #cdpSessionId;
-			    #cdpClient;
-			    #maybeDefaultRealm;
-			    get #defaultRealm() {
-			        if (this.#maybeDefaultRealm === undefined) {
-			            throw new Error(`No default realm for browsing context ${this.#contextId}`);
-			        }
-			        return this.#maybeDefaultRealm;
-			    }
-			    constructor(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager) {
-			        this.#contextId = contextId;
-			        this.#parentId = parentId;
-			        this.#cdpClient = cdpClient;
-			        this.#cdpBrowserContextId = cdpBrowserContextId;
-			        this.#eventManager = eventManager;
-			        this.#cdpSessionId = cdpSessionId;
-			        this.#initListeners();
-			        browsingContextStorage_js_1$2.BrowsingContextStorage.addContext(this);
-			    }
-			    static async createFrameContext(contextId, parentId, cdpClient, cdpSessionId, eventManager) {
-			        const context = new BrowsingContextImpl(contextId, parentId, cdpClient, cdpSessionId, null, eventManager);
-			        context.#targetDefers.targetUnblocked.resolve();
-			        await eventManager.registerEvent({
-			            method: protocol_js_1$2.BrowsingContext.EventNames.ContextCreatedEvent,
-			            params: context.serializeToBidiValue(),
-			        }, context.contextId);
-			    }
-			    static async createTargetContext(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager) {
-			        const context = new BrowsingContextImpl(contextId, parentId, cdpClient, cdpSessionId, cdpBrowserContextId, eventManager);
-			        // No need in waiting for target to be unblocked.
-			        // noinspection ES6MissingAwait
-			        context.#unblockAttachedTarget();
-			        await eventManager.registerEvent({
-			            method: protocol_js_1$2.BrowsingContext.EventNames.ContextCreatedEvent,
-			            params: context.serializeToBidiValue(),
-			        }, context.contextId);
-			    }
-			    get cdpBrowserContextId() {
-			        return this.#cdpBrowserContextId;
-			    }
-			    convertFrameToTargetContext(cdpClient, cdpSessionId) {
-			        this.#updateConnection(cdpClient, cdpSessionId);
-			        // No need in waiting for target to be unblocked.
-			        // noinspection JSIgnoredPromiseFromCall
-			        this.#unblockAttachedTarget();
-			    }
-			    async delete() {
-			        await this.#removeChildContexts();
-			        // Remove context from the parent.
-			        if (this.parentId !== null) {
-			            const parent = browsingContextStorage_js_1$2.BrowsingContextStorage.getKnownContext(this.parentId);
-			            parent.#children.delete(this.contextId);
-			        }
-			        await this.#eventManager.registerEvent({
-			            method: protocol_js_1$2.BrowsingContext.EventNames.ContextDestroyedEvent,
-			            params: this.serializeToBidiValue(),
-			        }, this.contextId);
-			        browsingContextStorage_js_1$2.BrowsingContextStorage.removeContext(this.contextId);
-			    }
-			    async #removeChildContexts() {
-			        await Promise.all(this.children.map((child) => child.delete()));
-			    }
-			    #updateConnection(cdpClient, cdpSessionId) {
-			        if (!this.#targetDefers.targetUnblocked.isFinished) {
-			            this.#targetDefers.targetUnblocked.reject('OOPiF');
-			        }
-			        this.#targetDefers.targetUnblocked = new deferred_js_1.Deferred();
-			        this.#cdpClient = cdpClient;
-			        this.#cdpSessionId = cdpSessionId;
-			        this.#initListeners();
-			    }
-			    async #unblockAttachedTarget() {
-			        logManager_js_1.LogManager.create(this.#cdpClient, this.#cdpSessionId, this.#eventManager);
-			        await this.#cdpClient.sendCommand('Runtime.enable');
-			        await this.#cdpClient.sendCommand('Page.enable');
-			        await this.#cdpClient.sendCommand('Page.setLifecycleEventsEnabled', {
-			            enabled: true,
-			        });
-			        await this.#cdpClient.sendCommand('Target.setAutoAttach', {
-			            autoAttach: true,
-			            waitForDebuggerOnStart: true,
-			            flatten: true,
-			        });
-			        await this.#cdpClient.sendCommand('Runtime.runIfWaitingForDebugger');
-			        this.#targetDefers.targetUnblocked.resolve();
-			    }
-			    get contextId() {
-			        return this.#contextId;
-			    }
-			    get parentId() {
-			        return this.#parentId;
-			    }
-			    get cdpSessionId() {
-			        return this.#cdpSessionId;
-			    }
-			    get children() {
-			        return Array.from(this.#children.values());
-			    }
-			    get url() {
-			        return this.#url;
-			    }
-			    addChild(child) {
-			        this.#children.set(child.contextId, child);
-			    }
-			    async awaitLoaded() {
-			        await this.#targetDefers.Page.lifecycleEvent.load;
-			    }
-			    async awaitUnblocked() {
-			        await this.#targetDefers.targetUnblocked;
-			    }
-			    serializeToBidiValue(maxDepth = 0, addParentFiled = true) {
-			        return {
-			            context: this.#contextId,
-			            url: this.url,
-			            children: maxDepth > 0
-			                ? this.children.map((c) => c.serializeToBidiValue(maxDepth - 1, false))
-			                : null,
-			            ...(addParentFiled ? { parent: this.#parentId } : {}),
-			        };
-			    }
-			    #initListeners() {
-			        this.#cdpClient.on('Target.targetInfoChanged', (params) => {
-			            if (this.contextId !== params.targetInfo.targetId) {
-			                return;
-			            }
-			            this.#url = params.targetInfo.url;
-			        });
-			        this.#cdpClient.on('Page.frameNavigated', async (params) => {
-			            if (this.contextId !== params.frame.id) {
-			                return;
-			            }
-			            this.#url = params.frame.url + (params.frame.urlFragment ?? '');
-			            // At the point the page is initiated, all the nested iframes from the
-			            // previous page are detached and realms are destroyed.
-			            // Remove context's children.
-			            await this.#removeChildContexts();
-			            // Remove all the already created realms.
-			            realm_js_1$1.Realm.clearBrowsingContext(this.contextId);
-			        });
-			        this.#cdpClient.on('Page.navigatedWithinDocument', (params) => {
-			            if (this.contextId !== params.frameId) {
-			                return;
-			            }
-			            this.#url = params.url;
-			            this.#targetDefers.Page.navigatedWithinDocument.resolve(params);
-			        });
-			        this.#cdpClient.on('Page.lifecycleEvent', async (params) => {
-			            if (this.contextId !== params.frameId) {
-			                return;
-			            }
-			            if (params.name === 'init') {
-			                this.#documentChanged(params.loaderId);
-			                this.#targetDefers.documentInitialized.resolve();
-			            }
-			            if (params.name === 'commit') {
-			                this.#loaderId = params.loaderId;
-			                return;
-			            }
-			            if (params.loaderId !== this.#loaderId) {
-			                return;
-			            }
-			            switch (params.name) {
-			                case 'DOMContentLoaded':
-			                    this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.resolve(params);
-			                    await this.#eventManager.registerEvent({
-			                        method: protocol_js_1$2.BrowsingContext.EventNames.DomContentLoadedEvent,
-			                        params: {
-			                            context: this.contextId,
-			                            navigation: this.#loaderId,
-			                            url: this.#url,
-			                        },
-			                    }, this.contextId);
-			                    break;
-			                case 'load':
-			                    this.#targetDefers.Page.lifecycleEvent.load.resolve(params);
-			                    await this.#eventManager.registerEvent({
-			                        method: protocol_js_1$2.BrowsingContext.EventNames.LoadEvent,
-			                        params: {
-			                            context: this.contextId,
-			                            navigation: this.#loaderId,
-			                            url: this.#url,
-			                        },
-			                    }, this.contextId);
-			                    break;
-			            }
-			        });
-			        this.#cdpClient.on('Runtime.executionContextCreated', (params) => {
-			            if (params.context.auxData.frameId !== this.contextId) {
-			                return;
-			            }
-			            // Only this execution contexts are supported for now.
-			            if (!['default', 'isolated'].includes(params.context.auxData.type)) {
-			                return;
-			            }
-			            const realm = realm_js_1$1.Realm.create(params.context.uniqueId, this.contextId, params.context.id, this.#getOrigin(params), 
-			            // TODO: differentiate types.
-			            realm_js_1$1.RealmType.window, 
-			            // Sandbox name for isolated world.
-			            params.context.auxData.type === 'isolated'
-			                ? params.context.name
-			                : undefined, this.#cdpSessionId, this.#cdpClient);
-			            if (params.context.auxData.isDefault) {
-			                this.#maybeDefaultRealm = realm;
-			            }
-			        });
-			        this.#cdpClient.on('Runtime.executionContextDestroyed', (params) => {
-			            realm_js_1$1.Realm.findRealms({
-			                cdpSessionId: this.#cdpSessionId,
-			                executionContextId: params.executionContextId,
-			            }).map((realm) => realm.delete());
-			        });
-			    }
-			    #getOrigin(params) {
-			        if (params.context.auxData.type === 'isolated') {
-			            // Sandbox should have the same origin as the context itself, but in CDP
-			            // it has an empty one.
-			            return this.#defaultRealm.origin;
-			        }
-			        // https://html.spec.whatwg.org/multipage/origin.html#ascii-serialisation-of-an-origin
-			        return ['://', ''].includes(params.context.origin)
-			            ? 'null'
-			            : params.context.origin;
-			    }
-			    #documentChanged(loaderId) {
-			        if (this.#loaderId === loaderId) {
-			            return;
-			        }
-			        if (!this.#targetDefers.documentInitialized.isFinished) {
-			            this.#targetDefers.documentInitialized.reject('Document changed');
-			        }
-			        this.#targetDefers.documentInitialized = new deferred_js_1.Deferred();
-			        if (!this.#targetDefers.Page.navigatedWithinDocument.isFinished) {
-			            this.#targetDefers.Page.navigatedWithinDocument.reject('Document changed');
-			        }
-			        this.#targetDefers.Page.navigatedWithinDocument =
-			            new deferred_js_1.Deferred();
-			        if (!this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.isFinished) {
-			            this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded.reject('Document changed');
-			        }
-			        this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded =
-			            new deferred_js_1.Deferred();
-			        if (!this.#targetDefers.Page.lifecycleEvent.load.isFinished) {
-			            this.#targetDefers.Page.lifecycleEvent.load.reject('Document changed');
-			        }
-			        this.#targetDefers.Page.lifecycleEvent.load =
-			            new deferred_js_1.Deferred();
-			        this.#loaderId = loaderId;
-			    }
-			    async navigate(url, wait) {
-			        await this.#targetDefers.targetUnblocked;
-			        // TODO: handle loading errors.
-			        const cdpNavigateResult = await this.#cdpClient.sendCommand('Page.navigate', {
-			            url,
-			            frameId: this.contextId,
-			        });
-			        if (cdpNavigateResult.errorText) {
-			            throw new protocol_js_1$2.Message.UnknownException(cdpNavigateResult.errorText);
-			        }
-			        if (cdpNavigateResult.loaderId !== undefined &&
-			            cdpNavigateResult.loaderId !== this.#loaderId) {
-			            this.#documentChanged(cdpNavigateResult.loaderId);
-			        }
-			        // Wait for `wait` condition.
-			        switch (wait) {
-			            case 'none':
-			                break;
-			            case 'interactive':
-			                // No `loaderId` means same-document navigation.
-			                if (cdpNavigateResult.loaderId === undefined) {
-			                    await this.#targetDefers.Page.navigatedWithinDocument;
-			                }
-			                else {
-			                    await this.#targetDefers.Page.lifecycleEvent.DOMContentLoaded;
-			                }
-			                break;
-			            case 'complete':
-			                // No `loaderId` means same-document navigation.
-			                if (cdpNavigateResult.loaderId === undefined) {
-			                    await this.#targetDefers.Page.navigatedWithinDocument;
-			                }
-			                else {
-			                    await this.#targetDefers.Page.lifecycleEvent.load;
-			                }
-			                break;
-			            default:
-			                throw new Error(`Not implemented wait '${wait}'`);
-			        }
-			        return {
-			            result: {
-			                navigation: cdpNavigateResult.loaderId || null,
-			                url: url,
-			            },
-			        };
-			    }
-			    async getOrCreateSandbox(sandbox) {
-			        if (sandbox === undefined || sandbox === '') {
-			            return this.#defaultRealm;
-			        }
-			        let maybeSandboxes = realm_js_1$1.Realm.findRealms({
-			            browsingContextId: this.contextId,
-			            sandbox,
-			        });
-			        if (maybeSandboxes.length == 0) {
-			            await this.#cdpClient.sendCommand('Page.createIsolatedWorld', {
-			                frameId: this.contextId,
-			                worldName: sandbox,
-			            });
-			            // `Runtime.executionContextCreated` should be emitted by the time the
-			            // previous command is done.
-			            maybeSandboxes = realm_js_1$1.Realm.findRealms({
-			                browsingContextId: this.contextId,
-			                sandbox,
-			            });
-			        }
-			        if (maybeSandboxes.length !== 1) {
-			            throw Error(`Sandbox ${sandbox} wasn't created.`);
-			        }
-			        return maybeSandboxes[0];
-			    }
-			}
-			browsingContextImpl.BrowsingContextImpl = BrowsingContextImpl;
-
-			/**
-			 * Copyright 2021 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(browsingContextProcessor, "__esModule", { value: true });
-			browsingContextProcessor.BrowsingContextProcessor = void 0;
-			const log_js_1 = log;
-			const protocol_js_1$1 = protocol$2;
-			const browsingContextImpl_js_1 = browsingContextImpl;
-			const realm_js_1 = realm;
-			const browsingContextStorage_js_1$1 = browsingContextStorage;
-			const logContext = (0, log_js_1.log)(log_js_1.LogType.browsingContexts);
-			class BrowsingContextProcessor {
-			    sessions = new Set();
-			    #cdpConnection;
-			    #selfTargetId;
-			    #eventManager;
-			    constructor(cdpConnection, selfTargetId, eventManager) {
-			        this.#cdpConnection = cdpConnection;
-			        this.#selfTargetId = selfTargetId;
-			        this.#eventManager = eventManager;
-			        this.#setBrowserClientEventListeners(this.#cdpConnection.browserClient());
-			    }
-			    #setBrowserClientEventListeners(browserClient) {
-			        this.#setTargetEventListeners(browserClient);
-			    }
-			    #setTargetEventListeners(cdpClient) {
-			        cdpClient.on('Target.attachedToTarget', async (params) => {
-			            await this.#handleAttachedToTargetEvent(params, cdpClient);
-			        });
-			        cdpClient.on('Target.detachedFromTarget', async (params) => {
-			            await BrowsingContextProcessor.#handleDetachedFromTargetEvent(params);
-			        });
-			    }
-			    #setSessionEventListeners(sessionId) {
-			        if (this.sessions.has(sessionId)) {
-			            return;
-			        }
-			        this.sessions.add(sessionId);
-			        const sessionCdpClient = this.#cdpConnection.getCdpClient(sessionId);
-			        this.#setTargetEventListeners(sessionCdpClient);
-			        sessionCdpClient.on('*', async (method, params) => {
-			            await this.#eventManager.registerEvent({
-			                method: protocol_js_1$1.CDP.EventNames.EventReceivedEvent,
-			                params: {
-			                    cdpMethod: method,
-			                    cdpParams: params || {},
-			                    cdpSession: sessionId,
-			                },
-			            }, null);
-			        });
-			        sessionCdpClient.on('Page.frameAttached', async (params) => {
-			            await browsingContextImpl_js_1.BrowsingContextImpl.createFrameContext(params.frameId, params.parentFrameId, sessionCdpClient, sessionId, this.#eventManager);
-			        });
-			    }
-			    async #handleAttachedToTargetEvent(params, parentSessionCdpClient) {
-			        const { sessionId, targetInfo } = params;
-			        let targetSessionCdpClient = this.#cdpConnection.getCdpClient(sessionId);
-			        if (!this.#isValidTarget(targetInfo)) {
-			            // DevTools or some other not supported by BiDi target.
-			            await targetSessionCdpClient.sendCommand('Runtime.runIfWaitingForDebugger');
-			            await parentSessionCdpClient.sendCommand('Target.detachFromTarget', params);
-			            return;
-			        }
-			        logContext('AttachedToTarget event received: ' + JSON.stringify(params));
-			        this.#setSessionEventListeners(sessionId);
-			        if (browsingContextStorage_js_1$1.BrowsingContextStorage.hasKnownContext(targetInfo.targetId)) {
-			            // OOPiF.
-			            browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(targetInfo.targetId).convertFrameToTargetContext(targetSessionCdpClient, sessionId);
-			        }
-			        else {
-			            await browsingContextImpl_js_1.BrowsingContextImpl.createTargetContext(targetInfo.targetId, null, targetSessionCdpClient, sessionId, params.targetInfo.browserContextId ?? null, this.#eventManager);
-			        }
-			    }
-			    // { "method": "Target.detachedFromTarget",
-			    //   "params": {
-			    //     "sessionId": "7EFBFB2A4942A8989B3EADC561BC46E9",
-			    //     "targetId": "19416886405CBA4E03DBB59FA67FF4E8" } }
-			    static async #handleDetachedFromTargetEvent(params) {
-			        // TODO: params.targetId is deprecated. Update this class to track using
-			        // params.sessionId instead.
-			        // https://github.com/GoogleChromeLabs/chromium-bidi/issues/60
-			        const contextId = params.targetId;
-			        await browsingContextStorage_js_1$1.BrowsingContextStorage.findContext(contextId)?.delete();
-			    }
-			    async process_browsingContext_getTree(params) {
-			        const resultContexts = params.root === undefined
-			            ? browsingContextStorage_js_1$1.BrowsingContextStorage.getTopLevelContexts()
-			            : [browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(params.root)];
-			        return {
-			            result: {
-			                contexts: resultContexts.map((c) => c.serializeToBidiValue(params.maxDepth ?? Number.MAX_VALUE)),
-			            },
-			        };
-			    }
-			    async process_browsingContext_create(params) {
-			        const browserCdpClient = this.#cdpConnection.browserClient();
-			        let referenceContext = undefined;
-			        if (params.referenceContext !== undefined) {
-			            referenceContext = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(params.referenceContext);
-			            if (referenceContext.parentId !== null) {
-			                throw new protocol_js_1$1.Message.InvalidArgumentException(`referenceContext should be a top-level context`);
-			            }
-			        }
-			        const result = await browserCdpClient.sendCommand('Target.createTarget', {
-			            url: 'about:blank',
-			            newWindow: params.type === 'window',
-			            ...(referenceContext?.cdpBrowserContextId
-			                ? { browserContextId: referenceContext.cdpBrowserContextId }
-			                : {}),
-			        });
-			        // Wait for the new tab to be loaded to avoid race conditions in the
-			        // `browsingContext` events, when the `browsingContext.domContentLoaded` and
-			        // `browsingContext.load` events from the initial `about:blank` navigation
-			        // are emitted after the next navigation is started.
-			        // Details: https://github.com/web-platform-tests/wpt/issues/35846
-			        const contextId = result.targetId;
-			        const context = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(contextId);
-			        await context.awaitLoaded();
-			        return {
-			            result: context.serializeToBidiValue(1),
-			        };
-			    }
-			    async process_browsingContext_navigate(params) {
-			        const context = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(params.context);
-			        return await context.navigate(params.url, params.wait !== undefined ? params.wait : 'none');
-			    }
-			    static async #getRealm(target) {
-			        if ('realm' in target) {
-			            return realm_js_1.Realm.getRealm({ realmId: target.realm });
-			        }
-			        const context = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(target.context);
-			        return await context.getOrCreateSandbox(target.sandbox);
-			    }
-			    async process_script_evaluate(params) {
-			        const realm = await BrowsingContextProcessor.#getRealm(params.target);
-			        return await realm.scriptEvaluate(params.expression, params.awaitPromise, params.resultOwnership ?? 'none');
-			    }
-			    process_script_getRealms(params) {
-			        if (params.context !== undefined) {
-			            // Make sure the context is known.
-			            browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(params.context);
-			        }
-			        const realms = realm_js_1.Realm.findRealms({
-			            browsingContextId: params.context,
-			            type: params.type,
-			        }).map((realm) => realm.toBiDi());
-			        return { result: { realms } };
-			    }
-			    async process_script_callFunction(params) {
-			        const realm = await BrowsingContextProcessor.#getRealm(params.target);
-			        return await realm.callFunction(params.functionDeclaration, params.this || {
-			            type: 'undefined',
-			        }, // `this` is `undefined` by default.
-			        params.arguments || [], // `arguments` is `[]` by default.
-			        params.awaitPromise, params.resultOwnership ?? 'none');
-			    }
-			    async process_script_disown(params) {
-			        const realm = await BrowsingContextProcessor.#getRealm(params.target);
-			        await Promise.all(params.handles.map(async (h) => await realm.disown(h)));
-			        return { result: {} };
-			    }
-			    async process_browsingContext_close(commandParams) {
-			        const browserCdpClient = this.#cdpConnection.browserClient();
-			        const context = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(commandParams.context);
-			        if (context.parentId !== null) {
-			            throw new protocol_js_1$1.Message.InvalidArgumentException('Not a top-level browsing context cannot be closed.');
-			        }
-			        const detachedFromTargetPromise = new Promise(async (resolve) => {
-			            const onContextDestroyed = (eventParams) => {
-			                if (eventParams.targetId === commandParams.context) {
-			                    browserCdpClient.off('Target.detachedFromTarget', onContextDestroyed);
-			                    resolve();
-			                }
-			            };
-			            browserCdpClient.on('Target.detachedFromTarget', onContextDestroyed);
-			        });
-			        await this.#cdpConnection
-			            .browserClient()
-			            .sendCommand('Target.closeTarget', {
-			            targetId: commandParams.context,
-			        });
-			        // Sometimes CDP command finishes before `detachedFromTarget` event,
-			        // sometimes after. Wait for the CDP command to be finished, and then wait
-			        // for `detachedFromTarget` if it hasn't emitted.
-			        await detachedFromTargetPromise;
-			        return { result: {} };
-			    }
-			    #isValidTarget(target) {
-			        if (target.targetId === this.#selfTargetId) {
-			            return false;
-			        }
-			        return ['page', 'iframe'].includes(target.type);
-			    }
-			    async process_cdp_sendCommand(params) {
-			        const client = params.cdpSession
-			            ? this.#cdpConnection.getCdpClient(params.cdpSession)
-			            : this.#cdpConnection.browserClient();
-			        const sendCdpCommandResult = await client.sendCommand(params.cdpMethod, params.cdpParams);
-			        return {
-			            result: sendCdpCommandResult,
-			            cdpSession: params.cdpSession,
-			        };
-			    }
-			    async process_cdp_getSession(params) {
-			        const context = params.context;
-			        const sessionId = browsingContextStorage_js_1$1.BrowsingContextStorage.getKnownContext(context).cdpSessionId;
-			        if (sessionId === undefined) {
-			            return { result: { cdpSession: null } };
-			        }
-			        return { result: { cdpSession: sessionId } };
-			    }
-			}
-			browsingContextProcessor.BrowsingContextProcessor = BrowsingContextProcessor;
-
-			/**
-			 * Copyright 2021 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(CommandProcessor$1, "__esModule", { value: true });
-			CommandProcessor$1.CommandProcessor = void 0;
-			const browsingContextProcessor_js_1 = browsingContextProcessor;
-			const protocol_js_1 = protocol$2;
-			const OutgoindBidiMessage_js_1 = OutgoindBidiMessage;
-			const EventEmitter_js_1$1 = EventEmitter$1;
-			class BidiNoOpParser {
-			    parseGetRealmsParams(params) {
-			        return params;
-			    }
-			    parseCallFunctionParams(params) {
-			        return params;
-			    }
-			    parseEvaluateParams(params) {
-			        return params;
-			    }
-			    parseDisownParams(params) {
-			        return params;
-			    }
-			    parseSendCommandParams(params) {
-			        return params;
-			    }
-			    parseGetSessionParams(params) {
-			        return params;
-			    }
-			    parseNavigateParams(params) {
-			        return params;
-			    }
-			    parseGetTreeParams(params) {
-			        return params;
-			    }
-			    parseSubscribeParams(params) {
-			        return params;
-			    }
-			    parseCreateParams(params) {
-			        return params;
-			    }
-			    parseCloseParams(params) {
-			        return params;
-			    }
-			}
-			class CommandProcessor extends EventEmitter_js_1$1.EventEmitter {
-			    #contextProcessor;
-			    #eventManager;
-			    #parser;
-			    constructor(cdpConnection, eventManager, selfTargetId, parser = new BidiNoOpParser()) {
-			        super();
-			        this.#eventManager = eventManager;
-			        this.#contextProcessor = new browsingContextProcessor_js_1.BrowsingContextProcessor(cdpConnection, selfTargetId, eventManager);
-			        this.#parser = parser;
-			    }
-			    // noinspection JSMethodCanBeStatic,JSUnusedLocalSymbols
-			    async #process_session_status() {
-			        return { result: { ready: false, message: 'already connected' } };
-			    }
-			    async #process_session_subscribe(params, channel) {
-			        await this.#eventManager.subscribe(params.events, params.contexts ?? [null], channel);
-			        return { result: {} };
-			    }
-			    async #process_session_unsubscribe(params, channel) {
-			        await this.#eventManager.unsubscribe(params.events, params.contexts ?? [null], channel);
-			        return { result: {} };
-			    }
-			    async #processCommand(commandData) {
-			        switch (commandData.method) {
-			            case 'session.status':
-			                return await this.#process_session_status();
-			            case 'session.subscribe':
-			                return await this.#process_session_subscribe(this.#parser.parseSubscribeParams(commandData.params), commandData.channel ?? null);
-			            case 'session.unsubscribe':
-			                return await this.#process_session_unsubscribe(this.#parser.parseSubscribeParams(commandData.params), commandData.channel ?? null);
-			            case 'browsingContext.create':
-			                return await this.#contextProcessor.process_browsingContext_create(this.#parser.parseCreateParams(commandData.params));
-			            case 'browsingContext.close':
-			                return await this.#contextProcessor.process_browsingContext_close(this.#parser.parseCloseParams(commandData.params));
-			            case 'browsingContext.getTree':
-			                return await this.#contextProcessor.process_browsingContext_getTree(this.#parser.parseGetTreeParams(commandData.params));
-			            case 'browsingContext.navigate':
-			                return await this.#contextProcessor.process_browsingContext_navigate(this.#parser.parseNavigateParams(commandData.params));
-			            case 'script.getRealms':
-			                return this.#contextProcessor.process_script_getRealms(this.#parser.parseGetRealmsParams(commandData.params));
-			            case 'script.callFunction':
-			                return await this.#contextProcessor.process_script_callFunction(this.#parser.parseCallFunctionParams(commandData.params));
-			            case 'script.evaluate':
-			                return await this.#contextProcessor.process_script_evaluate(this.#parser.parseEvaluateParams(commandData.params));
-			            case 'script.disown':
-			                return await this.#contextProcessor.process_script_disown(this.#parser.parseDisownParams(commandData.params));
-			            case 'cdp.sendCommand':
-			                return await this.#contextProcessor.process_cdp_sendCommand(this.#parser.parseSendCommandParams(commandData.params));
-			            case 'cdp.getSession':
-			                return await this.#contextProcessor.process_cdp_getSession(this.#parser.parseGetSessionParams(commandData.params));
-			            default:
-			                throw new protocol_js_1.Message.UnknownCommandException(`Unknown command '${commandData.method}'.`);
-			        }
-			    }
-			    processCommand = async (command) => {
-			        try {
-			            const result = await this.#processCommand(command);
-			            const response = {
-			                id: command.id,
-			                ...result,
-			            };
-			            this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(response, command.channel ?? null));
-			        }
-			        catch (e) {
-			            if (e instanceof protocol_js_1.Message.ErrorResponseClass) {
-			                const errorResponse = e;
-			                this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(errorResponse.toErrorResponse(command.id), command.channel ?? null));
-			            }
-			            else {
-			                const error = e;
-			                console.error(error);
-			                this.emit('response', OutgoindBidiMessage_js_1.OutgoingBidiMessage.createResolved(new protocol_js_1.Message.UnknownException(error.message).toErrorResponse(command.id), command.channel ?? null));
-			            }
-			        }
-			    };
-			}
-			CommandProcessor$1.CommandProcessor = CommandProcessor;
-
-			/**
-			 * Copyright 2021 Google LLC.
-			 * Copyright (c) Microsoft Corporation.
-			 *
-			 * Licensed under the Apache License, Version 2.0 (the "License");
-			 * you may not use this file except in compliance with the License.
-			 * You may obtain a copy of the License at
-			 *
-			 *     http://www.apache.org/licenses/LICENSE-2.0
-			 *
-			 * Unless required by applicable law or agreed to in writing, software
-			 * distributed under the License is distributed on an "AS IS" BASIS,
-			 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-			 * See the License for the specific language governing permissions and
-			 * limitations under the License.
-			 */
-			Object.defineProperty(BidiServer$1, "__esModule", { value: true });
-			BidiServer$1.BidiServer = void 0;
-			const EventEmitter_js_1 = EventEmitter$1;
-			const processingQueue_js_1 = processingQueue;
-			const EventManager_js_1 = EventManager$1;
-			const CommandProcessor_js_1 = CommandProcessor$1;
-			const browsingContextStorage_js_1 = browsingContextStorage;
-			class BidiServer extends EventEmitter_js_1.EventEmitter {
-			    #messageQueue;
-			    #transport;
-			    #commandProcessor;
-			    constructor(bidiTransport, cdpConnection, selfTargetId, parser) {
-			        super();
-			        this.#messageQueue = new processingQueue_js_1.ProcessingQueue(this.#processOutgoingMessage);
-			        this.#transport = bidiTransport;
-			        this.#transport.setOnMessage(this.#handleIncomingMessage);
-			        this.#commandProcessor = new CommandProcessor_js_1.CommandProcessor(cdpConnection, new EventManager_js_1.EventManager(this), selfTargetId, parser);
-			        this.#commandProcessor.on('response', (response) => {
-			            this.emitOutgoingMessage(response);
-			        });
-			    }
-			    static async createAndStart(bidiTransport, cdpConnection, selfTargetId, parser) {
-			        const server = new BidiServer(bidiTransport, cdpConnection, selfTargetId, parser);
-			        const cdpClient = cdpConnection.browserClient();
-			        // Needed to get events about new targets.
-			        await cdpClient.sendCommand('Target.setDiscoverTargets', { discover: true });
-			        // Needed to automatically attach to new targets.
-			        await cdpClient.sendCommand('Target.setAutoAttach', {
-			            autoAttach: true,
-			            waitForDebuggerOnStart: true,
-			            flatten: true,
-			        });
-			        await Promise.all(browsingContextStorage_js_1.BrowsingContextStorage.getTopLevelContexts().map((c) => c.awaitLoaded()));
-			        return server;
-			    }
-			    #processOutgoingMessage = async (messageEntry) => {
-			        const message = messageEntry.message;
-			        if (messageEntry.channel !== null) {
-			            message['channel'] = messageEntry.channel;
-			        }
-			        await this.#transport.sendMessage(message);
-			    };
-			    /**
-			     * Sends BiDi message.
-			     */
-			    emitOutgoingMessage(messageEntry) {
-			        this.#messageQueue.add(messageEntry);
-			    }
-			    close() {
-			        this.#transport.close();
-			    }
-			    #handleIncomingMessage = async (message) => {
-			        this.#commandProcessor.processCommand(message);
-			    };
-			}
-			BidiServer$1.BidiServer = BidiServer;
-
-			(function (exports) {
-				/**
-				 * Copyright 2022 Google LLC.
-				 * Copyright (c) Microsoft Corporation.
-				 *
-				 * Licensed under the Apache License, Version 2.0 (the "License");
-				 * you may not use this file except in compliance with the License.
-				 * You may obtain a copy of the License at
-				 *
-				 *     http://www.apache.org/licenses/LICENSE-2.0
-				 *
-				 * Unless required by applicable law or agreed to in writing, software
-				 * distributed under the License is distributed on an "AS IS" BASIS,
-				 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-				 * See the License for the specific language governing permissions and
-				 * limitations under the License.
-				 */
-				Object.defineProperty(exports, "__esModule", { value: true });
-				exports.EventEmitter = exports.BidiServer = void 0;
-				var BidiServer_js_1 = BidiServer$1;
-				Object.defineProperty(exports, "BidiServer", { enumerable: true, get: function () { return BidiServer_js_1.BidiServer; } });
-				var EventEmitter_js_1 = EventEmitter$1;
-				Object.defineProperty(exports, "EventEmitter", { enumerable: true, get: function () { return EventEmitter_js_1.EventEmitter; } });
-				
-			} (bidiMapper$2));
-
-			var bidiMapper = /*@__PURE__*/getDefaultExportFromCjs(bidiMapper$2);
-
-			var bidiMapper$1 = /*#__PURE__*/_mergeNamespaces({
-				__proto__: null,
-				'default': bidiMapper
-			}, [bidiMapper$2]);
-
-			exports.Bidi = protocol$1;
-			exports.BidiMapper = bidiMapper$1;
-		} (chromiumBidi));
-
-		var index = /*@__PURE__*/getDefaultExportFromCjs(chromiumBidi);
-
-		module.exports = index;
-	} (chromiumBidi));
-
-	var index = /*@__PURE__*/getDefaultExportFromCjs(chromiumBidiExports);
-
-	module.exports = index;
-} (chromiumBidi));
-
-var index = /*@__PURE__*/getDefaultExportFromCjs(chromiumBidiExports);
-
-module.exports = index;
-
-
-/***/ }),
-
 /***/ 3733:
 /***/ ((module) => {
 
@@ -46077,13 +46469,7 @@ module.exports = index;
 
 function mitt(n){return {all:n=n||new Map,on:function(t,e){var i=n.get(t);i?i.push(e):n.set(t,[e]);},off:function(t,e){var i=n.get(t);i&&(e?i.splice(i.indexOf(e)>>>0,1):n.set(t,[]));},emit:function(t,e){var i=n.get(t);i&&i.slice().map(function(n){n(e);}),(i=n.get("*"))&&i.slice().map(function(n){n(t,e);});}}}
 
-var mitt_1 = mitt;
-
-var mitt_2 = mitt_1;
-
-var mitt_3 = mitt_2;
-
-module.exports = mitt_3;
+module.exports = mitt;
 
 
 /***/ }),
