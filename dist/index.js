@@ -28747,9 +28747,6 @@ async function install(options) {
             debugTimeEnd('extract');
         }
     }
-    catch (err) {
-        debugInstall(`Error during installation`, err);
-    }
     finally {
         if ((0, fs_1.existsSync)(archivePath)) {
             await (0, promises_1.unlink)(archivePath);
@@ -29603,7 +29600,7 @@ exports.BrowserContext = BrowserContext;
 /***/ }),
 
 /***/ 3839:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
@@ -29622,6 +29619,12 @@ exports.BrowserContext = BrowserContext;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+};
+var _ElementHandle_instances, _ElementHandle_asSVGElementHandle, _ElementHandle_getOwnerSVGElement;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ElementHandle = void 0;
 const JSHandle_js_1 = __nccwpck_require__(882);
@@ -29664,6 +29667,7 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
      */
     constructor(handle) {
         super();
+        _ElementHandle_instances.add(this);
         this.handle = handle;
     }
     /**
@@ -29752,6 +29756,20 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
     }
     async waitForSelector() {
         throw new Error('Not implemented');
+    }
+    /**
+     * Checks if an element is visible using the same mechanism as
+     * {@link ElementHandle.waitForSelector}.
+     */
+    async isVisible() {
+        throw new Error('Not implemented.');
+    }
+    /**
+     * Checks if an element is hidden using the same mechanism as
+     * {@link ElementHandle.waitForSelector}.
+     */
+    async isHidden() {
+        throw new Error('Not implemented.');
     }
     async waitForXPath() {
         throw new Error('Not implemented');
@@ -29851,11 +29869,85 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
     async screenshot() {
         throw new Error('Not implemented');
     }
-    async isIntersectingViewport() {
+    /**
+     * @internal
+     */
+    async assertConnectedElement() {
+        const error = await this.evaluate(async (element) => {
+            if (!element.isConnected) {
+                return 'Node is detached from document';
+            }
+            if (element.nodeType !== Node.ELEMENT_NODE) {
+                return 'Node is not of type HTMLElement';
+            }
+            return;
+        });
+        if (error) {
+            throw new Error(error);
+        }
+    }
+    /**
+     * Resolves to true if the element is visible in the current viewport. If an
+     * element is an SVG, we check if the svg owner element is in the viewport
+     * instead. See https://crbug.com/963246.
+     */
+    async isIntersectingViewport(options) {
+        await this.assertConnectedElement();
+        const { threshold = 0 } = options !== null && options !== void 0 ? options : {};
+        const svgHandle = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_asSVGElementHandle).call(this, this);
+        const intersectionTarget = svgHandle
+            ? await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getOwnerSVGElement).call(this, svgHandle)
+            : this;
+        try {
+            return await intersectionTarget.evaluate(async (element, threshold) => {
+                const visibleRatio = await new Promise(resolve => {
+                    const observer = new IntersectionObserver(entries => {
+                        resolve(entries[0].intersectionRatio);
+                        observer.disconnect();
+                    });
+                    observer.observe(element);
+                });
+                return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
+            }, threshold);
+        }
+        finally {
+            if (intersectionTarget !== this) {
+                await intersectionTarget.dispose();
+            }
+        }
+    }
+    /**
+     * Scrolls the element into view using either the automation protocol client
+     * or by calling element.scrollIntoView.
+     */
+    async scrollIntoView() {
         throw new Error('Not implemented');
     }
 }
 exports.ElementHandle = ElementHandle;
+_ElementHandle_instances = new WeakSet(), _ElementHandle_asSVGElementHandle = 
+/**
+ * Returns true if an element is an SVGElement (included svg, path, rect
+ * etc.).
+ */
+async function _ElementHandle_asSVGElementHandle(handle) {
+    if (await handle.evaluate(element => {
+        return element instanceof SVGElement;
+    })) {
+        return handle;
+    }
+    else {
+        return null;
+    }
+}, _ElementHandle_getOwnerSVGElement = async function _ElementHandle_getOwnerSVGElement(handle) {
+    // SVGSVGElement.ownerSVGElement === null.
+    return await handle.evaluateHandle(element => {
+        if (element instanceof SVGSVGElement) {
+            return element;
+        }
+        return element.ownerSVGElement;
+    });
+};
 //# sourceMappingURL=ElementHandle.js.map
 
 /***/ }),
@@ -33635,7 +33727,7 @@ const ExecutionContext_js_1 = __nccwpck_require__(8272);
 const util_js_1 = __nccwpck_require__(8274);
 const util_js_2 = __nccwpck_require__(8274);
 /**
- * The Coverage class provides methods to gathers information about parts of
+ * The Coverage class provides methods to gather information about parts of
  * JavaScript and CSS that were used by the page.
  *
  * @remarks
@@ -36184,14 +36276,16 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _CDPElementHandle_instances, _CDPElementHandle_frame, _CDPElementHandle_frameManager_get, _CDPElementHandle_page_get, _CDPElementHandle_scrollIntoViewIfNeeded, _CDPElementHandle_getOOPIFOffsets, _CDPElementHandle_getBoxModel, _CDPElementHandle_fromProtocolQuad, _CDPElementHandle_intersectQuadWithViewport;
+var _CDPElementHandle_instances, _CDPElementHandle_frame, _CDPElementHandle_frameManager_get, _CDPElementHandle_page_get, _CDPElementHandle_checkVisibility, _CDPElementHandle_scrollIntoViewIfNeeded, _CDPElementHandle_getOOPIFOffsets, _CDPElementHandle_getBoxModel, _CDPElementHandle_fromProtocolQuad, _CDPElementHandle_intersectQuadWithViewport;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CDPElementHandle = void 0;
 const ElementHandle_js_1 = __nccwpck_require__(3839);
 const assert_js_1 = __nccwpck_require__(7729);
 const AsyncIterableUtil_js_1 = __nccwpck_require__(6992);
 const GetQueryHandler_js_1 = __nccwpck_require__(3465);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const JSHandle_js_1 = __nccwpck_require__(2045);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 const util_js_1 = __nccwpck_require__(8274);
 const applyOffsetsToQuad = (quad, offsetX, offsetY) => {
     return quad.map(part => {
@@ -36277,6 +36371,12 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
         }
         return this.waitForSelector(`xpath/${xpath}`, options);
     }
+    async isVisible() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_checkVisibility).call(this, true);
+    }
+    async isHidden() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_checkVisibility).call(this, false);
+    }
     async toElement(tagName) {
         const isMatchingTagName = await this.evaluate((node, tagName) => {
             return node.nodeName === tagName.toUpperCase();
@@ -36294,6 +36394,28 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
             return null;
         }
         return __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_frameManager_get).frame(nodeInfo.node.frameId);
+    }
+    async scrollIntoView() {
+        await this.assertConnectedElement();
+        try {
+            await this.client.send('DOM.scrollIntoViewIfNeeded', {
+                objectId: this.remoteObject().objectId,
+            });
+        }
+        catch (error) {
+            (0, util_js_1.debugError)(error);
+            // Fallback to Element.scrollIntoView if DOM.scrollIntoViewIfNeeded is not supported
+            await this.evaluate(async (element) => {
+                element.scrollIntoView({
+                    block: 'center',
+                    inline: 'center',
+                    // @ts-expect-error Chrome still supports behavior: instant but
+                    // it's not in the spec so TS shouts We don't want to make this
+                    // breaking change in Puppeteer yet so we'll ignore the line.
+                    behavior: 'instant',
+                });
+            });
+        }
     }
     async clickablePoint(offset) {
         const [result, layoutMetrics] = await Promise.all([
@@ -36597,67 +36719,31 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
         }
         return imageData;
     }
-    async isIntersectingViewport(options) {
-        const { threshold = 0 } = options !== null && options !== void 0 ? options : {};
-        return await this.evaluate(async (element, threshold) => {
-            const visibleRatio = await new Promise(resolve => {
-                const observer = new IntersectionObserver(entries => {
-                    resolve(entries[0].intersectionRatio);
-                    observer.disconnect();
-                });
-                observer.observe(element);
-            });
-            return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
-        }, threshold);
-    }
 }
 exports.CDPElementHandle = CDPElementHandle;
 _CDPElementHandle_frame = new WeakMap(), _CDPElementHandle_instances = new WeakSet(), _CDPElementHandle_frameManager_get = function _CDPElementHandle_frameManager_get() {
     return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f")._frameManager;
 }, _CDPElementHandle_page_get = function _CDPElementHandle_page_get() {
     return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f").page();
-}, _CDPElementHandle_scrollIntoViewIfNeeded = async function _CDPElementHandle_scrollIntoViewIfNeeded() {
-    const error = await this.evaluate(async (element) => {
-        if (!element.isConnected) {
-            return 'Node is detached from document';
-        }
-        if (element.nodeType !== Node.ELEMENT_NODE) {
-            return 'Node is not of type HTMLElement';
-        }
-        return;
-    });
-    if (error) {
-        throw new Error(error);
-    }
+}, _CDPElementHandle_checkVisibility = async function _CDPElementHandle_checkVisibility(visibility) {
+    const element = await this.frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].adoptHandle(this);
     try {
-        await this.client.send('DOM.scrollIntoViewIfNeeded', {
-            objectId: this.remoteObject().objectId,
-        });
+        return await this.frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].evaluate(async (PuppeteerUtil, element, visibility) => {
+            return Boolean(PuppeteerUtil.checkVisibility(element, visibility));
+        }, LazyArg_js_1.LazyArg.create(context => {
+            return context.puppeteerUtil;
+        }), element, visibility);
     }
-    catch (_err) {
-        // Fallback to Element.scrollIntoView if DOM.scrollIntoViewIfNeeded is not supported
-        await this.evaluate(async (element, pageJavascriptEnabled) => {
-            const visibleRatio = async () => {
-                return await new Promise(resolve => {
-                    const observer = new IntersectionObserver(entries => {
-                        resolve(entries[0].intersectionRatio);
-                        observer.disconnect();
-                    });
-                    observer.observe(element);
-                });
-            };
-            if (!pageJavascriptEnabled || (await visibleRatio()) !== 1.0) {
-                element.scrollIntoView({
-                    block: 'center',
-                    inline: 'center',
-                    // @ts-expect-error Chrome still supports behavior: instant but
-                    // it's not in the spec so TS shouts We don't want to make this
-                    // breaking change in Puppeteer yet so we'll ignore the line.
-                    behavior: 'instant',
-                });
-            }
-        }, __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).isJavaScriptEnabled());
+    finally {
+        await element.dispose();
     }
+}, _CDPElementHandle_scrollIntoViewIfNeeded = async function _CDPElementHandle_scrollIntoViewIfNeeded() {
+    if (await this.isIntersectingViewport({
+        threshold: 1,
+    })) {
+        return;
+    }
+    await this.scrollIntoView();
 }, _CDPElementHandle_getOOPIFOffsets = async function _CDPElementHandle_getOOPIFOffsets(frame) {
     let offsetX = 0;
     let offsetY = 0;
@@ -39660,7 +39746,7 @@ const DEFAULT_BATCH_SIZE = 20;
  * @param size - The number of elements to transpose. This should be something
  * reasonable.
  */
-async function* fastTransposeIteratorHandle(iterator, size = DEFAULT_BATCH_SIZE) {
+async function* fastTransposeIteratorHandle(iterator, size) {
     const array = await iterator.evaluateHandle(async (iterator, size) => {
         const results = [];
         while (results.length < size) {
@@ -39682,8 +39768,11 @@ async function* fastTransposeIteratorHandle(iterator, size = DEFAULT_BATCH_SIZE)
  * of {@link fastTransposeIteratorHandle}.
  */
 async function* transposeIteratorHandle(iterator) {
+    let size = DEFAULT_BATCH_SIZE;
     try {
-        while (!(yield* fastTransposeIteratorHandle(iterator))) { }
+        while (!(yield* fastTransposeIteratorHandle(iterator, size))) {
+            size <<= 1;
+        }
     }
     finally {
         await iterator.dispose();
@@ -47043,7 +47132,7 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '19.8.5';
+exports.packageVersion = '19.9.0';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
