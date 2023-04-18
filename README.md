@@ -1,7 +1,7 @@
 # Webpage Screenshot Action
 
-This action takes a screenshot of a webpage. 
-It also allows running some arbitrary JavaScript code on the 
+Capture a screenshot of a webpage, across Windows, Mac, and Linux.
+This action also allows running some arbitrary JavaScript code on the
 page before taking the screenshot (for example for navigation, DOM validation, etc.). 
 
 Its initial purpose was to help ensure PR quality

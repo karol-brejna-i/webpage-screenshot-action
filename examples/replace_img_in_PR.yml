@@ -1,0 +1,31 @@
+name: Replace screenshot in PR
+on:
+  pull_request:
+permissions:
+  contents: write
+jobs:
+  add_screenshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Configure git user
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+      - name: Take a screenshot
+        uses: karol-brejna-i/webpage-screenshot-action@v1
+        with:
+          url: ${{ github.event.repository.html_url }}/blob/${{ github.event.pull_request.head.ref }}/replace_in_place.md
+          mode: element
+          xpath: //table[1]
+          output: images/embedded_image.png
+      - name: Commit the changes
+        run: |
+          git add .
+          git commit -m "generated"
+          git status
+          git push
