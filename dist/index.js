@@ -39824,9 +39824,9 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _Keyboard_instances, _Keyboard_client, _Keyboard_pressedKeys, _Keyboard_modifierBit, _Keyboard_keyDescriptionForString, _Mouse_client, _Mouse_keyboard, _Mouse_x, _Mouse_y, _Mouse_button, _Touchscreen_client, _Touchscreen_keyboard;
+var _Keyboard_instances, _Keyboard_client, _Keyboard_pressedKeys, _Keyboard_modifierBit, _Keyboard_keyDescriptionForString, _Mouse_instances, _Mouse_client, _Mouse_keyboard, _Mouse__state, _Mouse_state_get, _Mouse_transactions, _Mouse_createTransaction, _Mouse_withTransaction, _Touchscreen_client, _Touchscreen_keyboard;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Touchscreen = exports.Mouse = exports.Keyboard = void 0;
+exports.Touchscreen = exports.Mouse = exports.MouseButton = exports.Keyboard = void 0;
 const assert_js_1 = __nccwpck_require__(7729);
 const USKeyboardLayout_js_1 = __nccwpck_require__(9931);
 /**
@@ -40108,6 +40108,32 @@ _Keyboard_client = new WeakMap(), _Keyboard_pressedKeys = new WeakMap(), _Keyboa
     return description;
 };
 /**
+ * Enum of valid mouse buttons.
+ *
+ * @public
+ */
+exports.MouseButton = Object.freeze({
+    Left: 'left',
+    Right: 'right',
+    Middle: 'middle',
+    Back: 'back',
+    Forward: 'forward',
+});
+const getFlag = (button) => {
+    switch (button) {
+        case exports.MouseButton.Left:
+            return 1 /* MouseButtonFlag.Left */;
+        case exports.MouseButton.Right:
+            return 2 /* MouseButtonFlag.Right */;
+        case exports.MouseButton.Middle:
+            return 4 /* MouseButtonFlag.Middle */;
+        case exports.MouseButton.Back:
+            return 8 /* MouseButtonFlag.Back */;
+        case exports.MouseButton.Forward:
+            return 16 /* MouseButtonFlag.Forward */;
+    }
+};
+/**
  * The Mouse class operates in main-frame CSS pixels
  * relative to the top-left corner of the viewport.
  * @remarks
@@ -40183,84 +40209,128 @@ class Mouse {
      * @internal
      */
     constructor(client, keyboard) {
+        _Mouse_instances.add(this);
         _Mouse_client.set(this, void 0);
         _Mouse_keyboard.set(this, void 0);
-        _Mouse_x.set(this, 0);
-        _Mouse_y.set(this, 0);
-        _Mouse_button.set(this, 'none');
+        _Mouse__state.set(this, {
+            position: { x: 0, y: 0 },
+            buttons: 0 /* MouseButtonFlag.None */,
+        });
+        // Transactions can run in parallel, so we store each of thme in this array.
+        _Mouse_transactions.set(this, []);
         __classPrivateFieldSet(this, _Mouse_client, client, "f");
         __classPrivateFieldSet(this, _Mouse_keyboard, keyboard, "f");
     }
     /**
-     * Dispatches a `mousemove` event.
+     * Moves the mouse to the given coordinate.
+     *
      * @param x - Horizontal position of the mouse.
      * @param y - Vertical position of the mouse.
-     * @param options - Optional object. If specified, the `steps` property
-     * sends intermediate `mousemove` events when set to `1` (default).
+     * @param options - Options to configure behavior.
      */
     async move(x, y, options = {}) {
         const { steps = 1 } = options;
-        const fromX = __classPrivateFieldGet(this, _Mouse_x, "f"), fromY = __classPrivateFieldGet(this, _Mouse_y, "f");
-        __classPrivateFieldSet(this, _Mouse_x, x, "f");
-        __classPrivateFieldSet(this, _Mouse_y, y, "f");
+        const from = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).position;
+        const to = { x, y };
         for (let i = 1; i <= steps; i++) {
-            await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-                type: 'mouseMoved',
-                button: __classPrivateFieldGet(this, _Mouse_button, "f"),
-                x: fromX + (__classPrivateFieldGet(this, _Mouse_x, "f") - fromX) * (i / steps),
-                y: fromY + (__classPrivateFieldGet(this, _Mouse_y, "f") - fromY) * (i / steps),
-                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+            await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+                updateState({
+                    position: {
+                        x: from.x + (to.x - from.x) * (i / steps),
+                        y: from.y + (to.y - from.y) * (i / steps),
+                    },
+                });
+                const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+                return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                    type: 'mouseMoved',
+                    modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                    buttons,
+                    // This should always be 0 (i.e. 'left'). See
+                    // https://w3c.github.io/uievents/#event-type-mousemove
+                    button: exports.MouseButton.Left,
+                    ...position,
+                });
             });
         }
+    }
+    /**
+     * Presses the mouse.
+     *
+     * @param options - Options to configure behavior.
+     */
+    async down(options = {}) {
+        const { button = exports.MouseButton.Left, clickCount = 1 } = options;
+        const flag = getFlag(button);
+        if (!flag) {
+            throw new Error(`Unsupported mouse button: ${button}`);
+        }
+        if (__classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & flag) {
+            throw new Error(`'${button}' is already pressed.`);
+        }
+        await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+            updateState({ buttons: __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons | flag });
+            const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+            return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                type: 'mousePressed',
+                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                clickCount,
+                buttons,
+                button,
+                ...position,
+            });
+        });
+    }
+    /**
+     * Releases the mouse.
+     *
+     * @param options - Options to configure behavior.
+     */
+    async up(options = {}) {
+        const { button = exports.MouseButton.Left, clickCount = 1 } = options;
+        const flag = getFlag(button);
+        if (!flag) {
+            throw new Error(`Unsupported mouse button: ${button}`);
+        }
+        if (!(__classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & flag)) {
+            throw new Error(`'${button}' is not pressed.`);
+        }
+        await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+            updateState({ buttons: __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & ~flag });
+            const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+            return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                type: 'mouseReleased',
+                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                clickCount,
+                buttons,
+                button,
+                ...position,
+            });
+        });
     }
     /**
      * Shortcut for `mouse.move`, `mouse.down` and `mouse.up`.
+     *
      * @param x - Horizontal position of the mouse.
      * @param y - Vertical position of the mouse.
-     * @param options - Optional `MouseOptions`.
+     * @param options - Options to configure behavior.
      */
     async click(x, y, options = {}) {
-        const { delay = null } = options;
-        await this.move(x, y);
-        await this.down(options);
-        if (delay !== null) {
-            await new Promise(f => {
-                return setTimeout(f, delay);
+        const { delay } = options;
+        const actions = [];
+        const { position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+        if (position.x !== x || position.y !== y) {
+            actions.push(this.move(x, y));
+        }
+        actions.push(this.down(options));
+        if (typeof delay === 'number') {
+            await Promise.all(actions);
+            actions.length = 0;
+            await new Promise(resolve => {
+                setTimeout(resolve, delay);
             });
         }
-        await this.up(options);
-    }
-    /**
-     * Dispatches a `mousedown` event.
-     * @param options - Optional `MouseOptions`.
-     */
-    async down(options = {}) {
-        const { button = 'left', clickCount = 1 } = options;
-        __classPrivateFieldSet(this, _Mouse_button, button, "f");
-        await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-            type: 'mousePressed',
-            button,
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
-            clickCount,
-        });
-    }
-    /**
-     * Dispatches a `mouseup` event.
-     * @param options - Optional `MouseOptions`.
-     */
-    async up(options = {}) {
-        const { button = 'left', clickCount = 1 } = options;
-        __classPrivateFieldSet(this, _Mouse_button, 'none', "f");
-        await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-            type: 'mouseReleased',
-            button,
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
-            clickCount,
-        });
+        actions.push(this.up(options));
+        await Promise.all(actions);
     }
     /**
      * Dispatches a `mousewheel` event.
@@ -40286,14 +40356,15 @@ class Mouse {
      */
     async wheel(options = {}) {
         const { deltaX = 0, deltaY = 0 } = options;
+        const { position, buttons } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
         await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
             type: 'mouseWheel',
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            deltaX,
-            deltaY,
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
             pointerType: 'mouse',
+            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+            deltaY,
+            deltaX,
+            buttons,
+            ...position,
         });
     }
     /**
@@ -40377,7 +40448,40 @@ class Mouse {
     }
 }
 exports.Mouse = Mouse;
-_Mouse_client = new WeakMap(), _Mouse_keyboard = new WeakMap(), _Mouse_x = new WeakMap(), _Mouse_y = new WeakMap(), _Mouse_button = new WeakMap();
+_Mouse_client = new WeakMap(), _Mouse_keyboard = new WeakMap(), _Mouse__state = new WeakMap(), _Mouse_transactions = new WeakMap(), _Mouse_instances = new WeakSet(), _Mouse_state_get = function _Mouse_state_get() {
+    return Object.assign({ ...__classPrivateFieldGet(this, _Mouse__state, "f") }, ...__classPrivateFieldGet(this, _Mouse_transactions, "f"));
+}, _Mouse_createTransaction = function _Mouse_createTransaction() {
+    const transaction = {};
+    __classPrivateFieldGet(this, _Mouse_transactions, "f").push(transaction);
+    const popTransaction = () => {
+        __classPrivateFieldGet(this, _Mouse_transactions, "f").splice(__classPrivateFieldGet(this, _Mouse_transactions, "f").indexOf(transaction), 1);
+    };
+    return {
+        update: (updates) => {
+            Object.assign(transaction, updates);
+        },
+        commit: () => {
+            __classPrivateFieldSet(this, _Mouse__state, { ...__classPrivateFieldGet(this, _Mouse__state, "f"), ...transaction }, "f");
+            popTransaction();
+        },
+        rollback: popTransaction,
+    };
+}, _Mouse_withTransaction = 
+/**
+ * This is a shortcut for a typical update, commit/rollback lifecycle based on
+ * the error of the action.
+ */
+async function _Mouse_withTransaction(action) {
+    const { update, commit, rollback } = __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_createTransaction).call(this);
+    try {
+        await action(update);
+        commit();
+    }
+    catch (error) {
+        rollback();
+        throw error;
+    }
+};
 /**
  * The Touchscreen class exposes touchscreen events.
  * @public
@@ -47132,7 +47236,7 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '19.9.0';
+exports.packageVersion = '19.9.1';
 //# sourceMappingURL=version.js.map
 
 /***/ }),
