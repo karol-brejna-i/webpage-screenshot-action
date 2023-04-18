@@ -1,7 +1,7 @@
 name: Periodic
 on:
   schedule:
-    - cron: '15 10 * * *'
+    - cron: '35 10 * * *'
 jobs:
     screenshots:
         runs-on: ubuntu-latest
