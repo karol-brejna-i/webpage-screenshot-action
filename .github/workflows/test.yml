@@ -1,9 +1,11 @@
 name: "units-test"
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
+      - develop
       - 'releases/*'
 
 jobs:
