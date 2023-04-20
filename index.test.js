@@ -219,7 +219,6 @@ test('test multipleUrls', async () => {
     console.log('test run with multiple Urls');
     cleanEnvs();
     const urls = ['https://google.com', 'https://www.onet.pl/'];
-    const screenshot = 'screenshot.png';
     // create a string with newlines from urls
     process.env['INPUT_URL'] = urls.join('\n');
     const ip = path.join(__dirname, 'index.js');

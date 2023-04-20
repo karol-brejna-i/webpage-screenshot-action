@@ -69,12 +69,13 @@ module.exports = {
                 }
 
                 // iterate over parametersJson.url and validate url
-                for (let i = 0; i < parametersJson.url.length; i++) {
-                    if (!this.checkUrl(parametersJson.url)) {
-                        core.info('Invalid URL: ' + parametersJson.url);
-                        throw Error('Please, provide a valid URLs.')
+                for (const url of parametersJson.url) {
+                    if (!this.checkUrl(url)) {
+                        core.error('Invalid URL: ' + url);
+                        throw Error('Please, provide a valid URL.')
                     }
                 }
+
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
                     if (!parametersJson.xpath && !parametersJson.selector) {
