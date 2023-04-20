@@ -7,7 +7,7 @@ jobs:
   two_urls:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: |
             https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md

@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: file://${{github.workspace}}/examples/simple.html
       - uses: actions/upload-artifact@v3
@@ -81,7 +81,7 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
       - name: Take a screenshot
-        uses: karol-brejna-i/webpage-screenshot-action@v1
+        uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: ${{ github.event.repository.html_url }}/blob/${{ github.event.pull_request.head.ref }}/replace_in_place.md
           mode: element
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: page
