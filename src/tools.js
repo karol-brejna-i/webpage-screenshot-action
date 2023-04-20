@@ -1,4 +1,6 @@
 const core = require('@actions/core');
+const os = require("os");
+const path = require("path");
 
 module.exports = {
     getMode: function () {
@@ -14,13 +16,17 @@ module.exports = {
                 const selector = core.getInput('selector');
                 const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
+
+                const debugInfo = core.getInput('debugInfo') || false;
+
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
                     scriptBefore: scriptBefore,
-                    output: output
+                    output: output,
+                    debugInfo: debugInfo
                 });
             }));
     },
@@ -61,5 +67,31 @@ module.exports = {
 
                 resolve(true);
             }));
+    },
+
+    giveError: function (message, error = undefined, includeStack = false) {
+        let combinedMessage = message;
+        if (error) combinedMessage += ` : ${error}`;
+        if (includeStack) {
+            combinedMessage += `\n${error.stack}`;
+        }
+        console.error(combinedMessage);
+        throw new Error(combinedMessage);
+    },
+
+    getBrowserPath: async function () {
+        const type = os.type();
+
+        let browserPath;
+        if (type === 'Windows_NT') {
+            browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+        } else if (type === 'Darwin') {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        } else {
+            browserPath = '/usr/bin/google-chrome';
+        }
+        core.debug('Browser path: ' + browserPath);
+        return browserPath;
     }
+
 }
