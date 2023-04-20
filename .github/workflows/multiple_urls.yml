@@ -11,7 +11,7 @@ jobs:
         with:
           url: |
             https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
-            https://googole.com
+            https://google.com
           output: s.png
           mode: wholePage
       - run: |

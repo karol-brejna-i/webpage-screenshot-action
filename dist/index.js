@@ -26746,13 +26746,6 @@ module.exports = {
     },
     decodeUrls: function (urls) {
         let lines = urls.split(/\r?\n/);
-        core.info('---------------------');
-        core.info(urls);
-        core.info(lines.length);
-        for (let i = 0; i < lines.length; i++) {
-            core.info(`${i}. '${lines[i]}'`);
-        }
-        core.info('---------------------');
         if (lines.length > 1) {
             return lines;
         } else {

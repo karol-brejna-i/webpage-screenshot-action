@@ -218,7 +218,7 @@ test('test run with faulty url', async () => {
 test('test multipleUrls', async () => {
     console.log('test run with multiple Urls');
     cleanEnvs();
-    const urls = ['https://google.com', 'https://www.onet.pl/'];
+    const urls = ['https://google.com', 'https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md'];
     // create a string with newlines from urls
     process.env['INPUT_URL'] = urls.join('\n');
     const ip = path.join(__dirname, 'index.js');
