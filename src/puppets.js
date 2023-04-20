@@ -90,17 +90,9 @@ function getPath(parameters, noOfUrls, i) {
 const puppetRun = async function (parameters) {
     core.info('Puppet new run.');
 
-    const scriptBefore = parameters['scriptBefore'];
-    const urls = [parameters['url']];
+    const urls = parameters['url']
 
-    core.info('---------------------');
-    core.info(scriptBefore);
-    let lines = scriptBefore.split(/\r?\n/);
-    core.info(lines.length);
-    for (let i = 0; i < lines.length; i++) {
-        core.info(`${i}. '${lines[i]}'`);
-    }
-    core.info('---------------------');
+
     // start the headless browser
     const browser = launchBrowser();
     return browser.then(async (browser) => {
@@ -117,7 +109,7 @@ const puppetRun = async function (parameters) {
                         const path = getPath(parameters, urls.length, i++);
 
                         let responseObject = {url: url, screenshot: path};
-
+                        const scriptBefore = parameters['scriptBefore'];
                         if (scriptBefore) {
                             core.info('Using scriptBefore parameter.');
 

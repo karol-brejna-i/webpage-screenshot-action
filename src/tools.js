@@ -6,11 +6,25 @@ module.exports = {
     getMode: function () {
         return core.getInput('mode') || 'wholePage';
     },
-
+    decodeUrls: function (urls) {
+        let lines = urls.split(/\r?\n/);
+        core.info('---------------------');
+        core.info(urls);
+        core.info(lines.length);
+        for (let i = 0; i < lines.length; i++) {
+            core.info(`${i}. '${lines[i]}'`);
+        }
+        core.info('---------------------');
+        if (lines.length > 1) {
+            return lines;
+        } else {
+            return [urls];
+        }
+    },
     getParameters: async function () {
         return new Promise(
             (resolve => {
-                const url = core.getInput('url', {required: true});
+                const url = this.decodeUrls(core.getInput('url', {required: true}));
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
@@ -54,9 +68,12 @@ module.exports = {
                     throw Error('Please provide mode.');
                 }
 
-                if (!this.checkUrl(parametersJson.url)) {
-                    core.info('Invalid URL: ' + parametersJson.url);
-                    throw Error('Please, provide a valid URL.')
+                // iterate over parametersJson.url and validate url
+                for (let i = 0; i < parametersJson.url.length; i++) {
+                    if (!this.checkUrl(parametersJson.url)) {
+                        core.info('Invalid URL: ' + parametersJson.url);
+                        throw Error('Please, provide a valid URLs.')
+                    }
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {

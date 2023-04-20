@@ -207,10 +207,37 @@ test('test run with faulty url', async () => {
             console.debug('Child process exited with success code!');
             const output = extractOutput(stout);
             expect(output.value).toEqual(expect.stringContaining('Error navigating to'));
-
         }
     });
     console.log('waiting for timeout');
 
     await new Promise(resolve => setTimeout(resolve, TIMEOUT + 500));
 }, TIMEOUT + 1000);
+
+
+test('test multipleUrls', async () => {
+    console.log('test run with multiple Urls');
+    cleanEnvs();
+    const urls = ['https://google.com', 'https://www.onet.pl/'];
+    const screenshot = 'screenshot.png';
+    // create a string with newlines from urls
+    process.env['INPUT_URL'] = urls.join('\n');
+    const ip = path.join(__dirname, 'index.js');
+
+    const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
+    console.log(result);
+
+    const output = extractOutput(result);
+    console.log("output: " + JSON.stringify(output));
+
+    // convert output.value to JSON
+    const outputJson = JSON.parse(output.value);
+    console.log("outputJson: " + JSON.stringify(outputJson));
+
+    // expect that output.value doesn't contain "Error"
+    await expect(output.value).not.toEqual(expect.stringContaining('Error'));
+    await expect(output.value).toEqual(expect.stringContaining('screenshot_1.png'));
+    await expect(output.value).toEqual(expect.stringContaining('screenshot_2.png'));
+    // expect that outputJson is an array of two elements
+    await expect(outputJson).toHaveLength(2);
+});
