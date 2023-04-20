@@ -16,7 +16,8 @@ const cleanEnvs = function () {
 
 const extractOutput = function (result) {
     // from result filter out only lines that start with "::set-output"
-    const outputEntries = result.split('\n').filter(line => line.startsWith('::set-output'));
+    const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('::set-output'));
+    console.warn(outputEntries);
     // there should be only one line with output
     expect(outputEntries.length).toBe(1);
 
