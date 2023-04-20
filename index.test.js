@@ -15,7 +15,12 @@ const cleanEnvs = function () {
 }
 
 const extractOutput = function (result) {
+    console.info('--------------------------------');
+    console.info('result: ');
+    console.info(result);
+    console.info('--------------------------------');
     const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('::set-output'));
+    console.info('outputEntries: ')
     console.info(outputEntries);
     // there should be only one line with output
     expect(outputEntries.length).toBe(1);
