@@ -15,9 +15,8 @@ const cleanEnvs = function () {
 }
 
 const extractOutput = function (result) {
-    // from result filter out only lines that start with "::set-output"
     const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('::set-output'));
-    core.warn(outputEntries);
+    console.info(outputEntries);
     // there should be only one line with output
     expect(outputEntries.length).toBe(1);
 
@@ -98,7 +97,6 @@ test('test given output name', async () => {
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
 
-    // from result filter out only lines that start with "::set-output"
     const output = extractOutput(result);
     console.log("output: " + output);
 
@@ -118,7 +116,6 @@ test('test run without scriptBefore', async () => {
     const result = cp.execSync(`node ${ip}`, {env: process.env}).toString();
     console.log(result);
 
-    // from result filter out only lines that start with "::set-output"
     const output = extractOutput(result);
     console.log("output: " + output);
 
@@ -141,7 +138,6 @@ test('test run with scriptBefore', async () => {
 
     const expectedJson = {url: url, screenshot: screenshot, scriptResult: 42};
 
-    // from result filter out only lines that start with "::set-output"
     const output = extractOutput(result);
     console.log("output: " + JSON.stringify(output));
 
