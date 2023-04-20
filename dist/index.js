@@ -5,8 +5,8 @@ require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 /***/ ((__unused_webpack_module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
-const tools = __nccwpck_require__(109);
-const {puppetRun} = __nccwpck_require__(9367);
+const tools = __nccwpck_require__(996);
+const {puppetRun} = __nccwpck_require__(2914);
 
 async function run() {
     try {
@@ -18,20 +18,19 @@ async function run() {
 
         // run the action logic and return the results
         const scriptResult = await puppetRun(parameters);
-        core.setOutput('scriptResult', scriptResult);
+        core.warning(`Script result: ${JSON.stringify(scriptResult)}`)
 
+        core.setOutput('scriptResult', scriptResult);
         core.info('Webpage Screenshot Action finished.');
+
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);
         core.info('Webpage Screenshot Action failed.');
+        // exit
+        process.exit(1);
     }
 }
-
-process.on('unhandledRejection', (reason, p) => {
-    console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
-    // application specific logging, throwing an error, or other logic here   process.exit(1); });
-});
 
 run();
 
@@ -26529,15 +26528,14 @@ function defaultCallback(err) {
 
 /***/ }),
 
-/***/ 9367:
+/***/ 2914:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(4807);
-const os = __nccwpck_require__(2037);
-const path = __nccwpck_require__(1017);
+const {getBrowserPath, giveError} = __nccwpck_require__(996);
 
-const catchConsole = async function (page) {
+const turnOnConsoleCatching = async function (page) {
     page.on('pageerror', function (err) {
         core.info(`Page error: ${err.toString()}`);
     });
@@ -26551,78 +26549,7 @@ const catchConsole = async function (page) {
     });
 };
 
-
-const getBrowserPath = async function () {
-    const type = os.type();
-
-    let browserPath;
-    if (type === 'Windows_NT') {
-        browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
-    } else if (type === 'Darwin') {
-        browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    } else {
-        browserPath = '/usr/bin/google-chrome';
-    }
-    core.debug('Browser path: ' + browserPath);
-    return browserPath;
-}
-
-const takePageScreenshot = async function (page, parameters) {
-    core.info(`Take page's screenshot.`);
-    const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
-    core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
-    await page.screenshot(screenshotOptions);
-    return true;
-}
-
-const getElement = async function(parameters, page) {
-    let element = undefined
-    if (parameters.selector) {
-        element = await page.$(parameters.selector);
-    } else if (parameters.xpath) {
-        const elements = await page.$x(parameters.xpath);
-        element = elements[0];
-    } else {
-        core.error('No selector or xpath provided.');
-    }
-    return element;
-}
-const scrollToElementScreenshot = async function (page, parameters) {
-    core.info(`Scroll to element and screenshot.`);
-    let element;
-    element = await getElement(parameters, page);
-    core.debug(`Element: ${element}`);
-    if (!element) {
-        core.warning('Element not found.');
-        return false;
-    } else {
-        // scroll to element
-        await page.evaluate(el => el.scrollIntoView(), element);
-        await takePageScreenshot(page, parameters);
-        return true;
-    }
-}
-
-const takeElementScreenshot = async function (page, parameters) {
-    core.info(`Take element's screenshot.`);
-    let element;
-    element = await getElement(parameters, page);
-    core.debug(`Element: ${element}`);
-    if (!element) {
-        core.warning('Element not found.');
-        return false;
-    } else {
-        await element.screenshot({path: parameters.output});
-        return true;
-    }
-}
-
-const puppetRun = async function (parameters) {
-    core.info('Puppet run new.');
-
-    const scriptBefore = parameters['scriptBefore'];
-    const urls = [parameters['url']];
-
+async function launchBrowser(){
     const width = parseInt(core.getInput('width')) | 800;
     const height = parseInt(core.getInput('height')) | 600;
     const launchOptions = {
@@ -26631,83 +26558,152 @@ const puppetRun = async function (parameters) {
         headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
+    return puppeteer.launch(launchOptions);
+}
 
-    // start the headless browser
-    const browser = await puppeteer.launch(launchOptions);
+async function getElement(page, parameters) {
+    let result = undefined;
+    if (parameters.selector) {
+        core.debug(`Getting element by selector ${parameters.selector}`);
+        result = page.$(parameters.selector)
+            .then(async (element) => element)
+            .catch((error) => giveError(`Error finding element by selector '${parameters.selector}'`, error));
+    } else if (parameters.xpath) {
+        core.debug(`Getting element by xpath ${parameters.xpath}`);
+        result = page.$x(parameters.xpath)
+            .then(async (elements) => elements[0])
+            .catch((error) => giveError(`Error finding element by xpath '${parameters.xpath}`, error));
+    } else {
+        giveError('No selector or xpath provided.');
+    }
+    return result;
+}
 
-    // TODO: "Promise me, it will look more like an async javascript" -- Promise
-    // make promises for all required shots
-    const promises = urls.map(
-        async (url) => {
-            const page = await browser.newPage();
+async function getScreenshotOperation(page, screenshotOptions, parameters) {
+    let result = undefined;
 
-            // XXX TODO: DEBUG code:
-            const version = await page.browser().version();
-            core.info('Browser version: ' + version);
-
-            // capture browser console, if required
-            await catchConsole(page);
-
-            // for result construction
-            let result = {};
-
-            let response;
-            try {
-                response = await page.goto(url, {waitUntil: 'networkidle2'});
-            } catch (error) {
-                console.log('page.goto() resulted in error: ' + error);
-                core.setFailed(error.message);
-                result = {error: error.message};
-            }
-
-            if (response) {
-                if (scriptBefore) {
-                    core.info('Using scriptBefore parameter.');
-
-                    const runMyScript = __nccwpck_require__(4261);
-                    try {
-                        result = {script: await runMyScript(page, scriptBefore)};
-                    } catch (error) {
-                        core.error(`Error in scriptBefore: ${error.message}`);
-                        core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
-                    }
-                    core.info(`Result: ${JSON.stringify(result)}`);
-                }
-
-                let success;
-                if (parameters.mode === 'page' || parameters.mode === 'wholePage') {
-                    success = await takePageScreenshot(page, parameters);
-                } else if (parameters.mode === 'element') {
-                    success = await takeElementScreenshot(page, parameters);
-                } else if (parameters.mode === 'scrollToElement') {
-                    success = await scrollToElementScreenshot(page, parameters);
-                }
-                if (success) {
-                    result.screenshot = parameters.output;
-                }
-            }
-
-            return result;
+    if (parameters.mode === 'page' || parameters.mode === 'wholePage') {
+        core.info(`Taking screenshot of page with options ${JSON.stringify(screenshotOptions)}.`);
+        result = page.screenshot(screenshotOptions);
+    } else if (parameters.mode === 'element') {
+        core.info(`Taking screenshot of an element with options ${JSON.stringify(screenshotOptions)}.`);
+        result = getElement(page, parameters)
+            .then((element) => element.screenshot(screenshotOptions))
+            .catch((error) => giveError(`Error finding element by selector ${parameters.selector}`, error));
+    } else if (parameters.mode === 'scrollToElement') {
+        core.info(`Scrolling to element with options ${JSON.stringify(screenshotOptions)}.`);
+        result = getElement(page, parameters).then((element) => {
+            return page.evaluate(el => el.scrollIntoView(), element)
+                .then(() => page.screenshot(screenshotOptions))
+                .catch((error) => giveError(`Error scrolling to element`, error));
+        }).catch((error) => {
+            giveError(`Error finding element`, error);
         });
 
-    const results = await Promise.all(promises);
+    } else {
+        giveError(`Unknown mode ${parameters.mode}`, undefined, false);
+    }
+    return result;
+}
 
-    const resultObject = results.map((result, index) => {
-        return {url: urls[index], result: result};
+function getPath(parameters, noOfUrls, i) {
+    if (noOfUrls > 1) {
+        // strip the extension
+        const extension = parameters.output.split('.').pop();
+        const name = parameters.output.substring(0, parameters.output.length - extension.length - 1);
+        // lpad the index to much the length of the number of urls
+        const index = i.toString().padStart(noOfUrls.toString().length, '0');
+        return `${name}_${index}.${extension}`;
+
+    } else {
+        return parameters.output;
+    }
+}
+
+const puppetRun = async function (parameters) {
+    core.info('Puppet new run.');
+
+    const urls = parameters['url']
+
+
+    // start the headless browser
+    const browser = launchBrowser();
+    return browser.then(async (browser) => {
+            let i = 1;
+            // iterate over urls and get pages
+            const results = urls.map(async (url) => {
+
+                return browser.newPage().then(async (page) => {
+                    // turn on console logs catching
+                    await turnOnConsoleCatching(page);
+
+                    core.info(`Navigating to ${url}`);
+                    return page.goto(url).then(async () => {
+                        const path = getPath(parameters, urls.length, i++);
+
+                        let responseObject = {url: url, screenshot: path};
+                        const scriptBefore = parameters['scriptBefore'];
+                        if (scriptBefore) {
+                            core.info('Using scriptBefore parameter.');
+
+                            const runMyScript = __nccwpck_require__(74);
+
+                            responseObject = {
+                                ...responseObject,
+                                scriptResult: await runMyScript(page, scriptBefore),
+                            };
+                            core.info(`Result: ${JSON.stringify(responseObject)}`);
+                        }
+
+                        core.info(`Taking screenshot of ${url}`);
+                        const screenshotOptions = {path: path, fullPage: parameters.mode === 'wholePage'};
+                        let waiter = getScreenshotOperation(page, screenshotOptions, parameters);
+                        core.debug("waiter: " + waiter);
+                        return waiter
+                            .then(async () => {
+                                core.info(`Screenshot saved to ${path}`);
+                                await page.close();
+
+                                if (parameters.debugInfo) {
+                                    responseObject = {screenshotOptions: screenshotOptions, ...responseObject};
+                                }
+
+                                return responseObject;
+                            })
+                            .catch((error) => giveError(`Error taking a screenshot of ${url}`, error));
+
+                    }).catch((error) => {
+                        giveError(`Error navigating to ${url}`, error);
+                    });
+
+                }).catch((error) => {
+                    core.error(`Error opening page for ${url}: ${error}`);
+                    return {url: url, error: error.message};
+                });
+
+            });
+
+            return Promise.all(results).then((results) => {
+                const stringifiedResults = JSON.stringify(results);
+                core.debug("awaited results: " + stringifiedResults);
+
+                browser.close();
+                return results;
+            });
+
+        }
+    ).catch((error) => {
+        console.error(`Error launching browser: ${error}`);
     });
+}
 
-    await browser.close();
 
-    core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
-    return resultObject;
-};
-
-module.exports = {catchConsole, puppetRun};
+module.exports = {turnOnConsoleCatching, puppetRun};
 
 
 /***/ }),
 
-/***/ 4261:
+/***/ 74:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
@@ -26737,32 +26733,45 @@ module.exports = runMyScript;
 
 /***/ }),
 
-/***/ 109:
+/***/ 996:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
+const os = __nccwpck_require__(2037);
+const path = __nccwpck_require__(1017);
 
 module.exports = {
     getMode: function () {
         return core.getInput('mode') || 'wholePage';
     },
-
+    decodeUrls: function (urls) {
+        let lines = urls.split(/\r?\n/);
+        if (lines.length > 1) {
+            return lines;
+        } else {
+            return [urls];
+        }
+    },
     getParameters: async function () {
         return new Promise(
             (resolve => {
-                const url = core.getInput('url', {required: true});
+                const url = this.decodeUrls(core.getInput('url', {required: true}));
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
                 const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
+
+                const debugInfo = core.getInput('debugInfo') || false;
+
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
                     scriptBefore: scriptBefore,
-                    output: output
+                    output: output,
+                    debugInfo: debugInfo
                 });
             }));
     },
@@ -26790,9 +26799,12 @@ module.exports = {
                     throw Error('Please provide mode.');
                 }
 
-                if (!this.checkUrl(parametersJson.url)) {
-                    core.info('Invalid URL: ' + parametersJson.url);
-                    throw Error('Please, provide a valid URL.')
+                // iterate over parametersJson.url and validate url
+                for (const url of parametersJson.url) {
+                    if (!this.checkUrl(url)) {
+                        core.error('Invalid URL: ' + url);
+                        throw Error('Please, provide a valid URL.')
+                    }
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
@@ -26803,7 +26815,33 @@ module.exports = {
 
                 resolve(true);
             }));
+    },
+
+    giveError: function (message, error = undefined, includeStack = false) {
+        let combinedMessage = message;
+        if (error) combinedMessage += ` : ${error}`;
+        if (includeStack) {
+            combinedMessage += `\n${error.stack}`;
+        }
+        console.error(combinedMessage);
+        throw new Error(combinedMessage);
+    },
+
+    getBrowserPath: async function () {
+        const type = os.type();
+
+        let browserPath;
+        if (type === 'Windows_NT') {
+            browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+        } else if (type === 'Darwin') {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        } else {
+            browserPath = '/usr/bin/google-chrome';
+        }
+        core.debug('Browser path: ' + browserPath);
+        return browserPath;
     }
+
 }
 
 

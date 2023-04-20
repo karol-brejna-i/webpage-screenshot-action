@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
-          url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
+          url: https://www.helloworld.org/
           scriptBefore: |
             if (element.innerText.includes('World')) { 
               console.log("Found!");

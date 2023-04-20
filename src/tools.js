@@ -1,26 +1,39 @@
 const core = require('@actions/core');
+const os = require("os");
+const path = require("path");
 
 module.exports = {
     getMode: function () {
         return core.getInput('mode') || 'wholePage';
     },
-
+    decodeUrls: function (urls) {
+        let lines = urls.split(/\r?\n/);
+        if (lines.length > 1) {
+            return lines;
+        } else {
+            return [urls];
+        }
+    },
     getParameters: async function () {
         return new Promise(
             (resolve => {
-                const url = core.getInput('url', {required: true});
+                const url = this.decodeUrls(core.getInput('url', {required: true}));
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
                 const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
+
+                const debugInfo = core.getInput('debugInfo') || false;
+
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
                     scriptBefore: scriptBefore,
-                    output: output
+                    output: output,
+                    debugInfo: debugInfo
                 });
             }));
     },
@@ -48,9 +61,12 @@ module.exports = {
                     throw Error('Please provide mode.');
                 }
 
-                if (!this.checkUrl(parametersJson.url)) {
-                    core.info('Invalid URL: ' + parametersJson.url);
-                    throw Error('Please, provide a valid URL.')
+                // iterate over parametersJson.url and validate url
+                for (const url of parametersJson.url) {
+                    if (!this.checkUrl(url)) {
+                        core.error('Invalid URL: ' + url);
+                        throw Error('Please, provide a valid URL.')
+                    }
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
@@ -61,5 +77,31 @@ module.exports = {
 
                 resolve(true);
             }));
+    },
+
+    giveError: function (message, error = undefined, includeStack = false) {
+        let combinedMessage = message;
+        if (error) combinedMessage += ` : ${error}`;
+        if (includeStack) {
+            combinedMessage += `\n${error.stack}`;
+        }
+        console.error(combinedMessage);
+        throw new Error(combinedMessage);
+    },
+
+    getBrowserPath: async function () {
+        const type = os.type();
+
+        let browserPath;
+        if (type === 'Windows_NT') {
+            browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+        } else if (type === 'Darwin') {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        } else {
+            browserPath = '/usr/bin/google-chrome';
+        }
+        core.debug('Browser path: ' + browserPath);
+        return browserPath;
     }
+
 }

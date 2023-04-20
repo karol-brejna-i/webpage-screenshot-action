@@ -1,10 +1,11 @@
 {
   "name": "webpage-screenshot-action",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "description": "Webpage Screenshot Action",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
+    "build": "ncc build index.js -o dist --source-map --license licenses.txt",
     "prepare": "ncc build index.js -o dist --source-map --license licenses.txt",
     "test": "jest",
     "all": "npm run lint && npm run prepare && npm run test"
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@vercel/ncc": "^0.36.1",
     "eslint": "^8.38.0",
-    "jest": "^29.5.0"
+    "jest": "^29.5.0",
+    "lodash": "^4.17.21"
   }
 }
