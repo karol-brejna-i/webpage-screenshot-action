@@ -5,8 +5,8 @@ require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 /***/ ((__unused_webpack_module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
-const tools = __nccwpck_require__(109);
-const {puppetRun} = __nccwpck_require__(9367);
+const tools = __nccwpck_require__(996);
+const {puppetRun} = __nccwpck_require__(2914);
 
 async function run() {
     try {
@@ -19,19 +19,19 @@ async function run() {
         // run the action logic and return the results
         const scriptResult = await puppetRun(parameters);
         core.setOutput('scriptResult', scriptResult);
-
+        // XXX TODO: there are some problem reading action output in when run in a workflow (not as local unit test)
+        // this is a workaround for the test to be able to run both locally and on GitHub runner
+        core.info('--action-result::' + JSON.stringify(scriptResult));
         core.info('Webpage Screenshot Action finished.');
+
     } catch (error) {
         core.error(error.message);
         core.setFailed(error.message);
         core.info('Webpage Screenshot Action failed.');
+        // exit
+        process.exit(1);
     }
 }
-
-process.on('unhandledRejection', (reason, p) => {
-    console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
-    // application specific logging, throwing an error, or other logic here   process.exit(1); });
-});
 
 run();
 
@@ -26529,15 +26529,14 @@ function defaultCallback(err) {
 
 /***/ }),
 
-/***/ 9367:
+/***/ 2914:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
 const puppeteer = __nccwpck_require__(4807);
-const os = __nccwpck_require__(2037);
-const path = __nccwpck_require__(1017);
+const {getBrowserPath, giveError} = __nccwpck_require__(996);
 
-const catchConsole = async function (page) {
+const turnOnConsoleCatching = async function (page) {
     page.on('pageerror', function (err) {
         core.info(`Page error: ${err.toString()}`);
     });
@@ -26551,78 +26550,7 @@ const catchConsole = async function (page) {
     });
 };
 
-
-const getBrowserPath = async function () {
-    const type = os.type();
-
-    let browserPath;
-    if (type === 'Windows_NT') {
-        browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
-    } else if (type === 'Darwin') {
-        browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    } else {
-        browserPath = '/usr/bin/google-chrome';
-    }
-    core.debug('Browser path: ' + browserPath);
-    return browserPath;
-}
-
-const takePageScreenshot = async function (page, parameters) {
-    core.info(`Take page's screenshot.`);
-    const screenshotOptions = {path: parameters.output, fullPage: parameters.mode === 'wholePage'}
-    core.info(`Screenshot options: ${JSON.stringify(screenshotOptions)}`);
-    await page.screenshot(screenshotOptions);
-    return true;
-}
-
-const getElement = async function(parameters, page) {
-    let element = undefined
-    if (parameters.selector) {
-        element = await page.$(parameters.selector);
-    } else if (parameters.xpath) {
-        const elements = await page.$x(parameters.xpath);
-        element = elements[0];
-    } else {
-        core.error('No selector or xpath provided.');
-    }
-    return element;
-}
-const scrollToElementScreenshot = async function (page, parameters) {
-    core.info(`Scroll to element and screenshot.`);
-    let element;
-    element = await getElement(parameters, page);
-    core.debug(`Element: ${element}`);
-    if (!element) {
-        core.warning('Element not found.');
-        return false;
-    } else {
-        // scroll to element
-        await page.evaluate(el => el.scrollIntoView(), element);
-        await takePageScreenshot(page, parameters);
-        return true;
-    }
-}
-
-const takeElementScreenshot = async function (page, parameters) {
-    core.info(`Take element's screenshot.`);
-    let element;
-    element = await getElement(parameters, page);
-    core.debug(`Element: ${element}`);
-    if (!element) {
-        core.warning('Element not found.');
-        return false;
-    } else {
-        await element.screenshot({path: parameters.output});
-        return true;
-    }
-}
-
-const puppetRun = async function (parameters) {
-    core.info('Puppet run new.');
-
-    const scriptBefore = parameters['scriptBefore'];
-    const urls = [parameters['url']];
-
+async function launchBrowser(){
     const width = parseInt(core.getInput('width')) | 800;
     const height = parseInt(core.getInput('height')) | 600;
     const launchOptions = {
@@ -26631,83 +26559,153 @@ const puppetRun = async function (parameters) {
         headless: true
     }
     core.info('Launch options: ' + JSON.stringify(launchOptions));
+    return puppeteer.launch(launchOptions);
+}
 
-    // start the headless browser
-    const browser = await puppeteer.launch(launchOptions);
+async function getElement(page, parameters) {
+    let result = undefined;
+    if (parameters.selector) {
+        core.debug(`Getting element by selector ${parameters.selector}`);
+        result = page.$(parameters.selector)
+            .then(async (element) => element)
+            .catch((error) => giveError(`Error finding element by selector '${parameters.selector}'`, error));
+    } else if (parameters.xpath) {
+        core.debug(`Getting element by xpath ${parameters.xpath}`);
+        result = page.$x(parameters.xpath)
+            .then(async (elements) => elements[0])
+            .catch((error) => giveError(`Error finding element by xpath '${parameters.xpath}`, error));
+    } else {
+        giveError('No selector or xpath provided.');
+    }
+    return result;
+}
 
-    // TODO: "Promise me, it will look more like an async javascript" -- Promise
-    // make promises for all required shots
-    const promises = urls.map(
-        async (url) => {
-            const page = await browser.newPage();
+async function getScreenshotOperation(page, screenshotOptions, parameters) {
+    let result = undefined;
 
-            // XXX TODO: DEBUG code:
-            const version = await page.browser().version();
-            core.info('Browser version: ' + version);
-
-            // capture browser console, if required
-            await catchConsole(page);
-
-            // for result construction
-            let result = {};
-
-            let response;
-            try {
-                response = await page.goto(url, {waitUntil: 'networkidle2'});
-            } catch (error) {
-                console.log('page.goto() resulted in error: ' + error);
-                core.setFailed(error.message);
-                result = {error: error.message};
-            }
-
-            if (response) {
-                if (scriptBefore) {
-                    core.info('Using scriptBefore parameter.');
-
-                    const runMyScript = __nccwpck_require__(4261);
-                    try {
-                        result = {script: await runMyScript(page, scriptBefore)};
-                    } catch (error) {
-                        core.error(`Error in scriptBefore: ${error.message}`);
-                        core.setFailed(error.message); // XXX TODO shouldn't I return a Promise in the first place and then reject it?
-                    }
-                    core.info(`Result: ${JSON.stringify(result)}`);
-                }
-
-                let success;
-                if (parameters.mode === 'page' || parameters.mode === 'wholePage') {
-                    success = await takePageScreenshot(page, parameters);
-                } else if (parameters.mode === 'element') {
-                    success = await takeElementScreenshot(page, parameters);
-                } else if (parameters.mode === 'scrollToElement') {
-                    success = await scrollToElementScreenshot(page, parameters);
-                }
-                if (success) {
-                    result.screenshot = parameters.output;
-                }
-            }
-
-            return result;
+    if (parameters.mode === 'page' || parameters.mode === 'wholePage') {
+        core.info(`Taking screenshot of page with options ${JSON.stringify(screenshotOptions)}.`);
+        result = page.screenshot(screenshotOptions);
+    } else if (parameters.mode === 'element') {
+        core.info(`Taking screenshot of an element with options ${JSON.stringify(screenshotOptions)}.`);
+        result = getElement(page, parameters)
+            .then((element) => element.screenshot(screenshotOptions))
+            .catch((error) => giveError(`Error finding element by selector ${parameters.selector}`, error));
+    } else if (parameters.mode === 'scrollToElement') {
+        core.info(`Scrolling to element with options ${JSON.stringify(screenshotOptions)}.`);
+        result = getElement(page, parameters).then((element) => {
+            return page.evaluate(el => el.scrollIntoView(), element)
+                .then(() => page.screenshot(screenshotOptions))
+                .catch((error) => giveError(`Error scrolling to element`, error));
+        }).catch((error) => {
+            giveError(`Error finding element`, error);
         });
 
-    const results = await Promise.all(promises);
+    } else {
+        giveError(`Unknown mode ${parameters.mode}`, undefined, false);
+    }
+    return result;
+}
 
-    const resultObject = results.map((result, index) => {
-        return {url: urls[index], result: result};
+function getPath(parameters, noOfUrls, i) {
+    if (noOfUrls > 1) {
+        // strip the extension
+        const extension = parameters.output.split('.').pop();
+        const name = parameters.output.substring(0, parameters.output.length - extension.length - 1);
+        // lpad the index to much the length of the number of urls
+        const index = i.toString().padStart(noOfUrls.toString().length, '0');
+        return `${name}_${index}.${extension}`;
+
+    } else {
+        return parameters.output;
+    }
+}
+
+const puppetRun = async function (parameters) {
+    core.info('Puppet new run.');
+
+    const urls = parameters['url']
+
+
+    // start the headless browser
+    const browser = launchBrowser();
+    return browser.then(async (browser) => {
+            let i = 1;
+            // iterate over urls and get pages
+            const results = urls.map(async (url) => {
+
+                return browser.newPage().then(async (page) => {
+                    // turn on console logs catching
+                    await turnOnConsoleCatching(page);
+
+                    core.info(`Navigating to ${url}`);
+                    return page.goto(url).then(async () => {
+                        const path = getPath(parameters, urls.length, i++);
+
+                        let responseObject = {url: url, screenshot: path};
+                        const scriptBefore = parameters['scriptBefore'];
+                        if (scriptBefore) {
+                            core.info('Using scriptBefore parameter.');
+
+                            const runMyScript = __nccwpck_require__(74);
+
+                            responseObject = {
+                                ...responseObject,
+                                scriptResult: await runMyScript(page, scriptBefore),
+                            };
+                            core.info(`Result: ${JSON.stringify(responseObject)}`);
+                        }
+
+                        core.info(`Taking screenshot of ${url}`);
+                        const screenshotOptions = {path: path, fullPage: parameters.mode === 'wholePage'};
+                        let waiter = getScreenshotOperation(page, screenshotOptions, parameters);
+                        core.debug("waiter: " + waiter);
+                        return waiter
+                            .then(async () => {
+                                core.info(`Screenshot saved to ${path}`);
+                                await page.close();
+
+                                if (parameters.debugInfo) {
+                                    responseObject = {screenshotOptions: screenshotOptions, ...responseObject};
+                                }
+
+                                return responseObject;
+                            })
+                            .catch((error) => giveError(`Error taking a screenshot of ${url}`, error));
+
+                    }).catch((error) => {
+                        giveError(`Error navigating to ${url}`, error);
+                    });
+
+                }).catch((error) => {
+                    core.error(`Error opening page for ${url}: ${error}`);
+                    return {url: url, error: error.message};
+                });
+
+            });
+
+            return Promise.all(results).then((results) => {
+                const stringifiedResults = JSON.stringify(results);
+                core.debug("awaited results: " + stringifiedResults);
+
+                browser.close();
+
+                return results;
+            });
+
+        }
+    ).catch((error) => {
+        console.error(`Error launching browser: ${error}`);
     });
+}
 
-    await browser.close();
 
-    core.debug(`resultObject: ${JSON.stringify(resultObject)}`);
-    return resultObject;
-};
-
-module.exports = {catchConsole, puppetRun};
+module.exports = {turnOnConsoleCatching, puppetRun};
 
 
 /***/ }),
 
-/***/ 4261:
+/***/ 74:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
@@ -26737,32 +26735,45 @@ module.exports = runMyScript;
 
 /***/ }),
 
-/***/ 109:
+/***/ 996:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 const core = __nccwpck_require__(2186);
+const os = __nccwpck_require__(2037);
+const path = __nccwpck_require__(1017);
 
 module.exports = {
     getMode: function () {
         return core.getInput('mode') || 'wholePage';
     },
-
+    decodeUrls: function (urls) {
+        let lines = urls.split(/\r?\n/);
+        if (lines.length > 1) {
+            return lines;
+        } else {
+            return [urls];
+        }
+    },
     getParameters: async function () {
         return new Promise(
             (resolve => {
-                const url = core.getInput('url', {required: true});
+                const url = this.decodeUrls(core.getInput('url', {required: true}));
                 const mode = this.getMode();
                 const xpath = core.getInput('xpath');
                 const selector = core.getInput('selector');
                 const scriptBefore = core.getInput('scriptBefore');
                 const output = core.getInput('output') || 'screenshot.png';
+
+                const debugInfo = core.getInput('debugInfo') || false;
+
                 resolve({
                     url: url,
                     mode: mode,
                     xpath: xpath,
                     selector: selector,
                     scriptBefore: scriptBefore,
-                    output: output
+                    output: output,
+                    debugInfo: debugInfo
                 });
             }));
     },
@@ -26790,9 +26801,12 @@ module.exports = {
                     throw Error('Please provide mode.');
                 }
 
-                if (!this.checkUrl(parametersJson.url)) {
-                    core.info('Invalid URL: ' + parametersJson.url);
-                    throw Error('Please, provide a valid URL.')
+                // iterate over parametersJson.url and validate url
+                for (const url of parametersJson.url) {
+                    if (!this.checkUrl(url)) {
+                        core.error('Invalid URL: ' + url);
+                        throw Error('Please, provide a valid URL.')
+                    }
                 }
 
                 if (['scrollToElement', 'element'].indexOf(parametersJson.mode) === 1) {
@@ -26803,7 +26817,33 @@ module.exports = {
 
                 resolve(true);
             }));
+    },
+
+    giveError: function (message, error = undefined, includeStack = false) {
+        let combinedMessage = message;
+        if (error) combinedMessage += ` : ${error}`;
+        if (includeStack) {
+            combinedMessage += `\n${error.stack}`;
+        }
+        console.error(combinedMessage);
+        throw new Error(combinedMessage);
+    },
+
+    getBrowserPath: async function () {
+        const type = os.type();
+
+        let browserPath;
+        if (type === 'Windows_NT') {
+            browserPath = path.join(process.env.PROGRAMFILES, 'Google/Chrome/Application/chrome.exe');
+        } else if (type === 'Darwin') {
+            browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+        } else {
+            browserPath = '/usr/bin/google-chrome';
+        }
+        core.debug('Browser path: ' + browserPath);
+        return browserPath;
     }
+
 }
 
 
@@ -28747,9 +28787,6 @@ async function install(options) {
             debugTimeEnd('extract');
         }
     }
-    catch (err) {
-        debugInstall(`Error during installation`, err);
-    }
     finally {
         if ((0, fs_1.existsSync)(archivePath)) {
             await (0, promises_1.unlink)(archivePath);
@@ -29603,7 +29640,7 @@ exports.BrowserContext = BrowserContext;
 /***/ }),
 
 /***/ 3839:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
@@ -29622,6 +29659,12 @@ exports.BrowserContext = BrowserContext;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (receiver, state, kind, f) {
+    if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
+};
+var _ElementHandle_instances, _ElementHandle_asSVGElementHandle, _ElementHandle_getOwnerSVGElement;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ElementHandle = void 0;
 const JSHandle_js_1 = __nccwpck_require__(882);
@@ -29664,6 +29707,7 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
      */
     constructor(handle) {
         super();
+        _ElementHandle_instances.add(this);
         this.handle = handle;
     }
     /**
@@ -29752,6 +29796,20 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
     }
     async waitForSelector() {
         throw new Error('Not implemented');
+    }
+    /**
+     * Checks if an element is visible using the same mechanism as
+     * {@link ElementHandle.waitForSelector}.
+     */
+    async isVisible() {
+        throw new Error('Not implemented.');
+    }
+    /**
+     * Checks if an element is hidden using the same mechanism as
+     * {@link ElementHandle.waitForSelector}.
+     */
+    async isHidden() {
+        throw new Error('Not implemented.');
     }
     async waitForXPath() {
         throw new Error('Not implemented');
@@ -29851,11 +29909,85 @@ class ElementHandle extends JSHandle_js_1.JSHandle {
     async screenshot() {
         throw new Error('Not implemented');
     }
-    async isIntersectingViewport() {
+    /**
+     * @internal
+     */
+    async assertConnectedElement() {
+        const error = await this.evaluate(async (element) => {
+            if (!element.isConnected) {
+                return 'Node is detached from document';
+            }
+            if (element.nodeType !== Node.ELEMENT_NODE) {
+                return 'Node is not of type HTMLElement';
+            }
+            return;
+        });
+        if (error) {
+            throw new Error(error);
+        }
+    }
+    /**
+     * Resolves to true if the element is visible in the current viewport. If an
+     * element is an SVG, we check if the svg owner element is in the viewport
+     * instead. See https://crbug.com/963246.
+     */
+    async isIntersectingViewport(options) {
+        await this.assertConnectedElement();
+        const { threshold = 0 } = options !== null && options !== void 0 ? options : {};
+        const svgHandle = await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_asSVGElementHandle).call(this, this);
+        const intersectionTarget = svgHandle
+            ? await __classPrivateFieldGet(this, _ElementHandle_instances, "m", _ElementHandle_getOwnerSVGElement).call(this, svgHandle)
+            : this;
+        try {
+            return await intersectionTarget.evaluate(async (element, threshold) => {
+                const visibleRatio = await new Promise(resolve => {
+                    const observer = new IntersectionObserver(entries => {
+                        resolve(entries[0].intersectionRatio);
+                        observer.disconnect();
+                    });
+                    observer.observe(element);
+                });
+                return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
+            }, threshold);
+        }
+        finally {
+            if (intersectionTarget !== this) {
+                await intersectionTarget.dispose();
+            }
+        }
+    }
+    /**
+     * Scrolls the element into view using either the automation protocol client
+     * or by calling element.scrollIntoView.
+     */
+    async scrollIntoView() {
         throw new Error('Not implemented');
     }
 }
 exports.ElementHandle = ElementHandle;
+_ElementHandle_instances = new WeakSet(), _ElementHandle_asSVGElementHandle = 
+/**
+ * Returns true if an element is an SVGElement (included svg, path, rect
+ * etc.).
+ */
+async function _ElementHandle_asSVGElementHandle(handle) {
+    if (await handle.evaluate(element => {
+        return element instanceof SVGElement;
+    })) {
+        return handle;
+    }
+    else {
+        return null;
+    }
+}, _ElementHandle_getOwnerSVGElement = async function _ElementHandle_getOwnerSVGElement(handle) {
+    // SVGSVGElement.ownerSVGElement === null.
+    return await handle.evaluateHandle(element => {
+        if (element instanceof SVGSVGElement) {
+            return element;
+        }
+        return element.ownerSVGElement;
+    });
+};
 //# sourceMappingURL=ElementHandle.js.map
 
 /***/ }),
@@ -33635,7 +33767,7 @@ const ExecutionContext_js_1 = __nccwpck_require__(8272);
 const util_js_1 = __nccwpck_require__(8274);
 const util_js_2 = __nccwpck_require__(8274);
 /**
- * The Coverage class provides methods to gathers information about parts of
+ * The Coverage class provides methods to gather information about parts of
  * JavaScript and CSS that were used by the page.
  *
  * @remarks
@@ -36184,14 +36316,16 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _CDPElementHandle_instances, _CDPElementHandle_frame, _CDPElementHandle_frameManager_get, _CDPElementHandle_page_get, _CDPElementHandle_scrollIntoViewIfNeeded, _CDPElementHandle_getOOPIFOffsets, _CDPElementHandle_getBoxModel, _CDPElementHandle_fromProtocolQuad, _CDPElementHandle_intersectQuadWithViewport;
+var _CDPElementHandle_instances, _CDPElementHandle_frame, _CDPElementHandle_frameManager_get, _CDPElementHandle_page_get, _CDPElementHandle_checkVisibility, _CDPElementHandle_scrollIntoViewIfNeeded, _CDPElementHandle_getOOPIFOffsets, _CDPElementHandle_getBoxModel, _CDPElementHandle_fromProtocolQuad, _CDPElementHandle_intersectQuadWithViewport;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CDPElementHandle = void 0;
 const ElementHandle_js_1 = __nccwpck_require__(3839);
 const assert_js_1 = __nccwpck_require__(7729);
 const AsyncIterableUtil_js_1 = __nccwpck_require__(6992);
 const GetQueryHandler_js_1 = __nccwpck_require__(3465);
+const IsolatedWorlds_js_1 = __nccwpck_require__(2296);
 const JSHandle_js_1 = __nccwpck_require__(2045);
+const LazyArg_js_1 = __nccwpck_require__(4897);
 const util_js_1 = __nccwpck_require__(8274);
 const applyOffsetsToQuad = (quad, offsetX, offsetY) => {
     return quad.map(part => {
@@ -36277,6 +36411,12 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
         }
         return this.waitForSelector(`xpath/${xpath}`, options);
     }
+    async isVisible() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_checkVisibility).call(this, true);
+    }
+    async isHidden() {
+        return __classPrivateFieldGet(this, _CDPElementHandle_instances, "m", _CDPElementHandle_checkVisibility).call(this, false);
+    }
     async toElement(tagName) {
         const isMatchingTagName = await this.evaluate((node, tagName) => {
             return node.nodeName === tagName.toUpperCase();
@@ -36294,6 +36434,28 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
             return null;
         }
         return __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_frameManager_get).frame(nodeInfo.node.frameId);
+    }
+    async scrollIntoView() {
+        await this.assertConnectedElement();
+        try {
+            await this.client.send('DOM.scrollIntoViewIfNeeded', {
+                objectId: this.remoteObject().objectId,
+            });
+        }
+        catch (error) {
+            (0, util_js_1.debugError)(error);
+            // Fallback to Element.scrollIntoView if DOM.scrollIntoViewIfNeeded is not supported
+            await this.evaluate(async (element) => {
+                element.scrollIntoView({
+                    block: 'center',
+                    inline: 'center',
+                    // @ts-expect-error Chrome still supports behavior: instant but
+                    // it's not in the spec so TS shouts We don't want to make this
+                    // breaking change in Puppeteer yet so we'll ignore the line.
+                    behavior: 'instant',
+                });
+            });
+        }
     }
     async clickablePoint(offset) {
         const [result, layoutMetrics] = await Promise.all([
@@ -36597,67 +36759,31 @@ class CDPElementHandle extends ElementHandle_js_1.ElementHandle {
         }
         return imageData;
     }
-    async isIntersectingViewport(options) {
-        const { threshold = 0 } = options !== null && options !== void 0 ? options : {};
-        return await this.evaluate(async (element, threshold) => {
-            const visibleRatio = await new Promise(resolve => {
-                const observer = new IntersectionObserver(entries => {
-                    resolve(entries[0].intersectionRatio);
-                    observer.disconnect();
-                });
-                observer.observe(element);
-            });
-            return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
-        }, threshold);
-    }
 }
 exports.CDPElementHandle = CDPElementHandle;
 _CDPElementHandle_frame = new WeakMap(), _CDPElementHandle_instances = new WeakSet(), _CDPElementHandle_frameManager_get = function _CDPElementHandle_frameManager_get() {
     return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f")._frameManager;
 }, _CDPElementHandle_page_get = function _CDPElementHandle_page_get() {
     return __classPrivateFieldGet(this, _CDPElementHandle_frame, "f").page();
-}, _CDPElementHandle_scrollIntoViewIfNeeded = async function _CDPElementHandle_scrollIntoViewIfNeeded() {
-    const error = await this.evaluate(async (element) => {
-        if (!element.isConnected) {
-            return 'Node is detached from document';
-        }
-        if (element.nodeType !== Node.ELEMENT_NODE) {
-            return 'Node is not of type HTMLElement';
-        }
-        return;
-    });
-    if (error) {
-        throw new Error(error);
-    }
+}, _CDPElementHandle_checkVisibility = async function _CDPElementHandle_checkVisibility(visibility) {
+    const element = await this.frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].adoptHandle(this);
     try {
-        await this.client.send('DOM.scrollIntoViewIfNeeded', {
-            objectId: this.remoteObject().objectId,
-        });
+        return await this.frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].evaluate(async (PuppeteerUtil, element, visibility) => {
+            return Boolean(PuppeteerUtil.checkVisibility(element, visibility));
+        }, LazyArg_js_1.LazyArg.create(context => {
+            return context.puppeteerUtil;
+        }), element, visibility);
     }
-    catch (_err) {
-        // Fallback to Element.scrollIntoView if DOM.scrollIntoViewIfNeeded is not supported
-        await this.evaluate(async (element, pageJavascriptEnabled) => {
-            const visibleRatio = async () => {
-                return await new Promise(resolve => {
-                    const observer = new IntersectionObserver(entries => {
-                        resolve(entries[0].intersectionRatio);
-                        observer.disconnect();
-                    });
-                    observer.observe(element);
-                });
-            };
-            if (!pageJavascriptEnabled || (await visibleRatio()) !== 1.0) {
-                element.scrollIntoView({
-                    block: 'center',
-                    inline: 'center',
-                    // @ts-expect-error Chrome still supports behavior: instant but
-                    // it's not in the spec so TS shouts We don't want to make this
-                    // breaking change in Puppeteer yet so we'll ignore the line.
-                    behavior: 'instant',
-                });
-            }
-        }, __classPrivateFieldGet(this, _CDPElementHandle_instances, "a", _CDPElementHandle_page_get).isJavaScriptEnabled());
+    finally {
+        await element.dispose();
     }
+}, _CDPElementHandle_scrollIntoViewIfNeeded = async function _CDPElementHandle_scrollIntoViewIfNeeded() {
+    if (await this.isIntersectingViewport({
+        threshold: 1,
+    })) {
+        return;
+    }
+    await this.scrollIntoView();
 }, _CDPElementHandle_getOOPIFOffsets = async function _CDPElementHandle_getOOPIFOffsets(frame) {
     let offsetX = 0;
     let offsetY = 0;
@@ -39660,7 +39786,7 @@ const DEFAULT_BATCH_SIZE = 20;
  * @param size - The number of elements to transpose. This should be something
  * reasonable.
  */
-async function* fastTransposeIteratorHandle(iterator, size = DEFAULT_BATCH_SIZE) {
+async function* fastTransposeIteratorHandle(iterator, size) {
     const array = await iterator.evaluateHandle(async (iterator, size) => {
         const results = [];
         while (results.length < size) {
@@ -39682,8 +39808,11 @@ async function* fastTransposeIteratorHandle(iterator, size = DEFAULT_BATCH_SIZE)
  * of {@link fastTransposeIteratorHandle}.
  */
 async function* transposeIteratorHandle(iterator) {
+    let size = DEFAULT_BATCH_SIZE;
     try {
-        while (!(yield* fastTransposeIteratorHandle(iterator))) { }
+        while (!(yield* fastTransposeIteratorHandle(iterator, size))) {
+            size <<= 1;
+        }
     }
     finally {
         await iterator.dispose();
@@ -39735,9 +39864,9 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _Keyboard_instances, _Keyboard_client, _Keyboard_pressedKeys, _Keyboard_modifierBit, _Keyboard_keyDescriptionForString, _Mouse_client, _Mouse_keyboard, _Mouse_x, _Mouse_y, _Mouse_button, _Touchscreen_client, _Touchscreen_keyboard;
+var _Keyboard_instances, _Keyboard_client, _Keyboard_pressedKeys, _Keyboard_modifierBit, _Keyboard_keyDescriptionForString, _Mouse_instances, _Mouse_client, _Mouse_keyboard, _Mouse__state, _Mouse_state_get, _Mouse_transactions, _Mouse_createTransaction, _Mouse_withTransaction, _Touchscreen_client, _Touchscreen_keyboard;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Touchscreen = exports.Mouse = exports.Keyboard = void 0;
+exports.Touchscreen = exports.Mouse = exports.MouseButton = exports.Keyboard = void 0;
 const assert_js_1 = __nccwpck_require__(7729);
 const USKeyboardLayout_js_1 = __nccwpck_require__(9931);
 /**
@@ -40019,6 +40148,32 @@ _Keyboard_client = new WeakMap(), _Keyboard_pressedKeys = new WeakMap(), _Keyboa
     return description;
 };
 /**
+ * Enum of valid mouse buttons.
+ *
+ * @public
+ */
+exports.MouseButton = Object.freeze({
+    Left: 'left',
+    Right: 'right',
+    Middle: 'middle',
+    Back: 'back',
+    Forward: 'forward',
+});
+const getFlag = (button) => {
+    switch (button) {
+        case exports.MouseButton.Left:
+            return 1 /* MouseButtonFlag.Left */;
+        case exports.MouseButton.Right:
+            return 2 /* MouseButtonFlag.Right */;
+        case exports.MouseButton.Middle:
+            return 4 /* MouseButtonFlag.Middle */;
+        case exports.MouseButton.Back:
+            return 8 /* MouseButtonFlag.Back */;
+        case exports.MouseButton.Forward:
+            return 16 /* MouseButtonFlag.Forward */;
+    }
+};
+/**
  * The Mouse class operates in main-frame CSS pixels
  * relative to the top-left corner of the viewport.
  * @remarks
@@ -40094,84 +40249,128 @@ class Mouse {
      * @internal
      */
     constructor(client, keyboard) {
+        _Mouse_instances.add(this);
         _Mouse_client.set(this, void 0);
         _Mouse_keyboard.set(this, void 0);
-        _Mouse_x.set(this, 0);
-        _Mouse_y.set(this, 0);
-        _Mouse_button.set(this, 'none');
+        _Mouse__state.set(this, {
+            position: { x: 0, y: 0 },
+            buttons: 0 /* MouseButtonFlag.None */,
+        });
+        // Transactions can run in parallel, so we store each of thme in this array.
+        _Mouse_transactions.set(this, []);
         __classPrivateFieldSet(this, _Mouse_client, client, "f");
         __classPrivateFieldSet(this, _Mouse_keyboard, keyboard, "f");
     }
     /**
-     * Dispatches a `mousemove` event.
+     * Moves the mouse to the given coordinate.
+     *
      * @param x - Horizontal position of the mouse.
      * @param y - Vertical position of the mouse.
-     * @param options - Optional object. If specified, the `steps` property
-     * sends intermediate `mousemove` events when set to `1` (default).
+     * @param options - Options to configure behavior.
      */
     async move(x, y, options = {}) {
         const { steps = 1 } = options;
-        const fromX = __classPrivateFieldGet(this, _Mouse_x, "f"), fromY = __classPrivateFieldGet(this, _Mouse_y, "f");
-        __classPrivateFieldSet(this, _Mouse_x, x, "f");
-        __classPrivateFieldSet(this, _Mouse_y, y, "f");
+        const from = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).position;
+        const to = { x, y };
         for (let i = 1; i <= steps; i++) {
-            await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-                type: 'mouseMoved',
-                button: __classPrivateFieldGet(this, _Mouse_button, "f"),
-                x: fromX + (__classPrivateFieldGet(this, _Mouse_x, "f") - fromX) * (i / steps),
-                y: fromY + (__classPrivateFieldGet(this, _Mouse_y, "f") - fromY) * (i / steps),
-                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+            await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+                updateState({
+                    position: {
+                        x: from.x + (to.x - from.x) * (i / steps),
+                        y: from.y + (to.y - from.y) * (i / steps),
+                    },
+                });
+                const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+                return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                    type: 'mouseMoved',
+                    modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                    buttons,
+                    // This should always be 0 (i.e. 'left'). See
+                    // https://w3c.github.io/uievents/#event-type-mousemove
+                    button: exports.MouseButton.Left,
+                    ...position,
+                });
             });
         }
+    }
+    /**
+     * Presses the mouse.
+     *
+     * @param options - Options to configure behavior.
+     */
+    async down(options = {}) {
+        const { button = exports.MouseButton.Left, clickCount = 1 } = options;
+        const flag = getFlag(button);
+        if (!flag) {
+            throw new Error(`Unsupported mouse button: ${button}`);
+        }
+        if (__classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & flag) {
+            throw new Error(`'${button}' is already pressed.`);
+        }
+        await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+            updateState({ buttons: __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons | flag });
+            const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+            return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                type: 'mousePressed',
+                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                clickCount,
+                buttons,
+                button,
+                ...position,
+            });
+        });
+    }
+    /**
+     * Releases the mouse.
+     *
+     * @param options - Options to configure behavior.
+     */
+    async up(options = {}) {
+        const { button = exports.MouseButton.Left, clickCount = 1 } = options;
+        const flag = getFlag(button);
+        if (!flag) {
+            throw new Error(`Unsupported mouse button: ${button}`);
+        }
+        if (!(__classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & flag)) {
+            throw new Error(`'${button}' is not pressed.`);
+        }
+        await __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_withTransaction).call(this, updateState => {
+            updateState({ buttons: __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get).buttons & ~flag });
+            const { buttons, position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+            return __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
+                type: 'mouseReleased',
+                modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+                clickCount,
+                buttons,
+                button,
+                ...position,
+            });
+        });
     }
     /**
      * Shortcut for `mouse.move`, `mouse.down` and `mouse.up`.
+     *
      * @param x - Horizontal position of the mouse.
      * @param y - Vertical position of the mouse.
-     * @param options - Optional `MouseOptions`.
+     * @param options - Options to configure behavior.
      */
     async click(x, y, options = {}) {
-        const { delay = null } = options;
-        await this.move(x, y);
-        await this.down(options);
-        if (delay !== null) {
-            await new Promise(f => {
-                return setTimeout(f, delay);
+        const { delay } = options;
+        const actions = [];
+        const { position } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
+        if (position.x !== x || position.y !== y) {
+            actions.push(this.move(x, y));
+        }
+        actions.push(this.down(options));
+        if (typeof delay === 'number') {
+            await Promise.all(actions);
+            actions.length = 0;
+            await new Promise(resolve => {
+                setTimeout(resolve, delay);
             });
         }
-        await this.up(options);
-    }
-    /**
-     * Dispatches a `mousedown` event.
-     * @param options - Optional `MouseOptions`.
-     */
-    async down(options = {}) {
-        const { button = 'left', clickCount = 1 } = options;
-        __classPrivateFieldSet(this, _Mouse_button, button, "f");
-        await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-            type: 'mousePressed',
-            button,
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
-            clickCount,
-        });
-    }
-    /**
-     * Dispatches a `mouseup` event.
-     * @param options - Optional `MouseOptions`.
-     */
-    async up(options = {}) {
-        const { button = 'left', clickCount = 1 } = options;
-        __classPrivateFieldSet(this, _Mouse_button, 'none', "f");
-        await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
-            type: 'mouseReleased',
-            button,
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
-            clickCount,
-        });
+        actions.push(this.up(options));
+        await Promise.all(actions);
     }
     /**
      * Dispatches a `mousewheel` event.
@@ -40197,14 +40396,15 @@ class Mouse {
      */
     async wheel(options = {}) {
         const { deltaX = 0, deltaY = 0 } = options;
+        const { position, buttons } = __classPrivateFieldGet(this, _Mouse_instances, "a", _Mouse_state_get);
         await __classPrivateFieldGet(this, _Mouse_client, "f").send('Input.dispatchMouseEvent', {
             type: 'mouseWheel',
-            x: __classPrivateFieldGet(this, _Mouse_x, "f"),
-            y: __classPrivateFieldGet(this, _Mouse_y, "f"),
-            deltaX,
-            deltaY,
-            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
             pointerType: 'mouse',
+            modifiers: __classPrivateFieldGet(this, _Mouse_keyboard, "f")._modifiers,
+            deltaY,
+            deltaX,
+            buttons,
+            ...position,
         });
     }
     /**
@@ -40288,7 +40488,40 @@ class Mouse {
     }
 }
 exports.Mouse = Mouse;
-_Mouse_client = new WeakMap(), _Mouse_keyboard = new WeakMap(), _Mouse_x = new WeakMap(), _Mouse_y = new WeakMap(), _Mouse_button = new WeakMap();
+_Mouse_client = new WeakMap(), _Mouse_keyboard = new WeakMap(), _Mouse__state = new WeakMap(), _Mouse_transactions = new WeakMap(), _Mouse_instances = new WeakSet(), _Mouse_state_get = function _Mouse_state_get() {
+    return Object.assign({ ...__classPrivateFieldGet(this, _Mouse__state, "f") }, ...__classPrivateFieldGet(this, _Mouse_transactions, "f"));
+}, _Mouse_createTransaction = function _Mouse_createTransaction() {
+    const transaction = {};
+    __classPrivateFieldGet(this, _Mouse_transactions, "f").push(transaction);
+    const popTransaction = () => {
+        __classPrivateFieldGet(this, _Mouse_transactions, "f").splice(__classPrivateFieldGet(this, _Mouse_transactions, "f").indexOf(transaction), 1);
+    };
+    return {
+        update: (updates) => {
+            Object.assign(transaction, updates);
+        },
+        commit: () => {
+            __classPrivateFieldSet(this, _Mouse__state, { ...__classPrivateFieldGet(this, _Mouse__state, "f"), ...transaction }, "f");
+            popTransaction();
+        },
+        rollback: popTransaction,
+    };
+}, _Mouse_withTransaction = 
+/**
+ * This is a shortcut for a typical update, commit/rollback lifecycle based on
+ * the error of the action.
+ */
+async function _Mouse_withTransaction(action) {
+    const { update, commit, rollback } = __classPrivateFieldGet(this, _Mouse_instances, "m", _Mouse_createTransaction).call(this);
+    try {
+        await action(update);
+        commit();
+    }
+    catch (error) {
+        rollback();
+        throw error;
+    }
+};
 /**
  * The Touchscreen class exposes touchscreen events.
  * @public
@@ -47043,7 +47276,7 @@ exports.packageVersion = void 0;
 /**
  * @internal
  */
-exports.packageVersion = '19.8.5';
+exports.packageVersion = '19.9.1';
 //# sourceMappingURL=version.js.map
 
 /***/ }),

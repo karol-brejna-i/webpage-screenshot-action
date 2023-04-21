@@ -1,7 +1,7 @@
 # Webpage Screenshot Action
 
-This action takes a screenshot of a webpage. 
-It also allows running some arbitrary JavaScript code on the 
+Capture a screenshot of a webpage, across Windows, Mac, and Linux.
+This action also allows running some arbitrary JavaScript code on the
 page before taking the screenshot (for example for navigation, DOM validation, etc.). 
 
 Its initial purpose was to help ensure PR quality
@@ -52,7 +52,7 @@ Here are the inputs you can use to configure the action:
 | mode         | The operating mode for the action. Possible values are: 'page', 'wholePage', 'scrollToElement', 'element' | `wholePage`        |
 | selector     | The CSS selector of the element to screenshot. Only used if _mode_ is 'element' or 'scrollToElement'      |                    |
 | xpath        | The XPath selector of the element to screenshot. Only used if _mode_ is 'element' or 'scrollToElement'    |                    |
-| scriptBefore | A script to execute before taking the screenshot. Only used if _mode_ is 'element' or 'scrollToElement'   |                    |
+| scriptBefore | JavaScript code to be executed before taking a screenshot.                                                |                    |
 
 
 #### url
@@ -227,6 +227,5 @@ The scripts and documentation in this project are released under the [Apache 2.0
 The following features are not implemented yet, but may be added in the future:
 1. Simulate a device (i.e.mobile phone; see https://pptr.dev/api/puppeteer.knowndevices/)
 2. Allow for multiple screenshots (i.e. for different devices)
-3. Allow for multiple URLs (i.e. for different pages)
 4. Capture the browser console output (if required) - mechanics in place, but not exposed as an input
 5. Specify screenshot type (puppeteer supports either jpeg or png)

@@ -1,0 +1,22 @@
+name: "Workflow example - multiple URLs"
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on:
+  workflow_dispatch:
+
+jobs:
+  two_urls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
+        with:
+          url: |
+            https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
+            https://google.com
+          output: s.png
+          mode: wholePage
+      - run: |
+          ls -lah *.png
+      - uses: actions/upload-artifact@v3
+        with:
+          name: screenshots
+          path: ${{ github.workspace }}/*.png

@@ -1,0 +1,19 @@
+name: Periodic
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+    screenshots:
+        runs-on: ubuntu-latest
+        steps:
+          - name: Dump GitHub context
+            env:
+              GITHUB_CONTEXT: ${{ toJSON(github) }}
+            run: echo "$GITHUB_CONTEXT"
+          - uses: karol-brejna-i/webpage-screenshot-action@v1
+            with:
+              url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/{{ github.ref_name }}/README.md
+          - uses: actions/upload-artifact@v3
+            with:
+              name: simple-screenshot
+              path: ${{ github.workspace }}/*.png
