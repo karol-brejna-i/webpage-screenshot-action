@@ -152,7 +152,7 @@ const puppetRun = async function (parameters) {
 
             return Promise.all(results).then((results) => {
                 const stringifiedResults = JSON.stringify(results);
-                core.warning("awaited results: " + stringifiedResults);
+                core.debug("awaited results: " + stringifiedResults);
 
                 browser.close();
 
