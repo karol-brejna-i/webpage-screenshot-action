@@ -14,7 +14,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/{{ github.ref_name }}/README.md
       - uses: actions/upload-artifact@v3
@@ -46,7 +46,7 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/{{ github.ref_name }}/README.md
 ```
@@ -64,7 +64,7 @@ on:
     - cron: '0 0 * * *'
 jobs:
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
       - uses: actions/upload-artifact@v3

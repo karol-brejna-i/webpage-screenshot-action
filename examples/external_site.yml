@@ -10,7 +10,7 @@ jobs:
     outputs:
         result: ${{ steps.screenshot.outputs }}
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@develop
+      - uses: karol-brejna-i/webpage-screenshot-action@v1
         id: screenshot
         with:
           url: https://google.com
