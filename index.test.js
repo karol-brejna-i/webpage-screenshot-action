@@ -19,7 +19,10 @@ const extractOutput = function (result) {
     console.info('result: ');
     console.info(result);
     console.info('--------------------------------');
-    const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('::set-output'));
+    // TODO XXX: this is a workaround for the test to be able to run both locally and on GitHub runner
+    // Because the action output is not visible in the console when run in a workflow (GitHub runner)
+    // const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('::set-output'));
+    const outputEntries = result.split(/\r?\n/).filter(line => line.startsWith('--action-result::'));
     console.info('outputEntries: ')
     console.info(outputEntries);
     // there should be only one line with output

@@ -12,11 +12,10 @@ async function run() {
 
         // run the action logic and return the results
         const scriptResult = await puppetRun(parameters);
-        core.warning(`Script result: ${JSON.stringify(scriptResult)}`)
-        core.warning('before set output');
         core.setOutput('scriptResult', scriptResult);
-        core.setOutput('scriptResult2', JSON.stringify(scriptResult));
-        core.warning('after set output');
+        // XXX TODO: there are some problem reading action output in when run in a workflow (not as local unit test)
+        // this is a workaround for the test to be able to run both locally and on GitHub runner
+        core.info('--action-result::' + JSON.stringify(scriptResult));
         core.info('Webpage Screenshot Action finished.');
 
     } catch (error) {
