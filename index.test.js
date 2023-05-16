@@ -178,7 +178,7 @@ test('test run with faulty scriptBefore', async () => {
         } else {
             console.debug('Child process exited with success code!');
             const output = extractOutput(stout);
-            expect(output.value).toEqual(expect.stringContaining('Evaluation failed'));
+            expect(output.value).toEqual(expect.stringContaining('SyntaxError: Illegal return statement'));
             console.info("Expected fail.");
         }
     });

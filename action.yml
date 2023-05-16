@@ -6,7 +6,7 @@ branding:
     color: 'blue'
 inputs:
   url: 
-    description: 'The URL of the page to be captured'
+    description: 'The URLs of the pages to be captured'
     required: true
   mode:
     description: |
