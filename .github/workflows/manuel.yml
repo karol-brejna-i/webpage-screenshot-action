@@ -64,14 +64,14 @@ jobs:
           name: screenshots
           path: ${{ github.workspace }}/*.png
   check_text:
-    name: Check if given text is present in the page (here, we are looking for 'World')
+    name: Check if given text is present in the page (here, we are looking for 'world')
     runs-on: ubuntu-latest
     steps:
       - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
           scriptBefore: |
-            if (element.innerText.includes('World')) {
+            if (element.innerText.toUpperCase().includes('WORLD')) {
               console.log("Found!");
               result = true;
             } else {
