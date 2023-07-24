@@ -7,7 +7,7 @@ jobs:
   readme_whole_page:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           output: readme-full-screenshot.png
@@ -22,12 +22,12 @@ jobs:
   readme_page:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: page
           output: readme-page-screenshot.png
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -52,7 +52,7 @@ jobs:
       - run: |
           google-chrome --version
           google-chrome-stable --version
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           output: dedicated-chrome-screenshot.png
@@ -67,7 +67,7 @@ jobs:
     name: Check if given text is present in the page (here, we are looking for 'World')
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
           scriptBefore: |
@@ -84,7 +84,7 @@ jobs:
   by_xpath:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -98,7 +98,7 @@ jobs:
   by_selector:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: scrollToElement
@@ -112,7 +112,7 @@ jobs:
   element_by_xpath:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -126,7 +126,7 @@ jobs:
   element_by_selector:
     runs-on: ubuntu-latest
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         with:
           url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/main/README.md
           mode: element
@@ -142,7 +142,7 @@ jobs:
     outputs:
       result: ${{ steps.screenshot.outputs.scriptResult }}
     steps:
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: screenshot
         with:
           url: https://google.com
