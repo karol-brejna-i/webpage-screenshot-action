@@ -29,7 +29,7 @@ jobs:
       - run: |
           pwd
           ls
-      - uses: karol-brejna-i/webpage-screenshot-action@v1
+      - uses: karol-brejna-i/webpage-screenshot-action@develop
         id: screenshot
         with:
           url: ${{ github.event.inputs.url }}
