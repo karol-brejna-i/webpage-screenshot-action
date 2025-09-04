@@ -19,11 +19,41 @@ const turnOnConsoleCatching = async function (page) {
 async function launchBrowser(){
     const width = parseInt(core.getInput('width')) | 800;
     const height = parseInt(core.getInput('height')) | 600;
+    
     const launchOptions = {
         executablePath: await getBrowserPath(),
         defaultViewport: {width, height},
-        headless: true
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
+    };
+
+    // Add proxy support if environment variables are set
+    const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
+    const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+    
+    if (httpProxy) {
+        core.info(`Using HTTP proxy: ${httpProxy}`);
+        launchOptions.args.push(`--proxy-server=${httpProxy}`);
+    } else if (httpsProxy) {
+        core.info(`Using HTTPS proxy: ${httpsProxy}`);
+        launchOptions.args.push(`--proxy-server=${httpsProxy}`);
     }
+
+    // Add no-proxy settings if specified
+    const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+    if (noProxy) {
+        launchOptions.args.push(`--proxy-bypass-list=${noProxy}`);
+    }
+
     core.info('Launch options: ' + JSON.stringify(launchOptions));
     return puppeteer.launch(launchOptions);
 }
