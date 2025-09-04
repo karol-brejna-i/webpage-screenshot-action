@@ -14,7 +14,7 @@ jobs:
           mode: wholePage
       - run: |
           ls -lah *.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: ${{ github.workspace }}/*.png
@@ -35,7 +35,7 @@ jobs:
           output: element.png
       - run: |
           ls -lah *.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: ${{ github.workspace }}/*.png
@@ -59,7 +59,7 @@ jobs:
           mode: wholePage
       - run: |
           ls -lah *.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: ${{ github.workspace }}/*.png
@@ -90,7 +90,7 @@ jobs:
           mode: scrollToElement
           xpath: //table[1]
           output: scroll-to-element-xpath-screenshot.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png
@@ -104,7 +104,7 @@ jobs:
           mode: scrollToElement
           selector: table
           output: scroll-to-element-selector-screenshot.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png
@@ -118,7 +118,7 @@ jobs:
           mode: element
           xpath: //table[1]
           output: element-by-xpath-screenshot.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png
@@ -132,7 +132,7 @@ jobs:
           mode: element
           xpath: //table[1]
           output: element-by-selector-screenshot.png
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: simple-screenshot
           path: ${{ github.workspace }}/*.png

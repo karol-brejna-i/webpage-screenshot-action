@@ -13,7 +13,7 @@ jobs:
           - uses: karol-brejna-i/webpage-screenshot-action@develop
             with:
               url: https://github.com/karol-brejna-i/webpage-screenshot-action/blob/{{ github.ref_name }}/README.md
-          - uses: actions/upload-artifact@v3
+          - uses: actions/upload-artifact@v4
             with:
               name: simple-screenshot
               path: ${{ github.workspace }}/*.png
