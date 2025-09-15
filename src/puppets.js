@@ -135,7 +135,7 @@ const puppetRun = async function (parameters) {
                     await turnOnConsoleCatching(page);
 
                     core.info(`Navigating to ${url}`);
-                    return page.goto(url).then(async () => {
+                    return page.goto(url, { waitUntil: 'networkidle0' }).then(async () => {
                         const path = getPath(parameters, urls.length, i++);
 
                         let responseObject = {url: url, screenshot: path};
