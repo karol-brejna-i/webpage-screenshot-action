@@ -1,24 +1,53 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/javascript-node
 {
-	"name": "Node.js",
-	"image": "mcr.microsoft.com/devcontainers/javascript-node:18",
-	"features": {
-		"ghcr.io/devcontainers-contrib/features/yamllint:1": {}
-	}
-
+	"name": "GitHub Action Development - Webpage Screenshot",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	
 	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+	"features": {
+		"ghcr.io/devcontainers-extra/features/yamllint:1": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "yarn install",
+	"postCreateCommand": "npm install",
 
 	// Configure tool-specific properties.
-	// "customizations": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.vscode-json",
+				"redhat.vscode-yaml",
+				"github.vscode-github-actions",
+				"ms-vscode.test-adapter-converter",
+				"orta.vscode-jest",
+				"esbenp.prettier-vscode",
+				"ms-vscode.vscode-eslint",
+				"github.copilot"
+			],
+			"settings": {
+				"editor.formatOnSave": true,
+				"eslint.validate": ["javascript"],
+				"jest.autoRun": "off"
+			}
+		}
+	},
 
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
+	// Mount the Docker socket for building and testing action containers
+	"mounts": [
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+	],
+
+	// Environment variables for GitHub Actions development
+	"containerEnv": {
+		"PUPPETEER_SKIP_CHROMIUM_DOWNLOAD": "true",
+		"PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium"
+	},
+
+	// Run as non-root user for security
+	"remoteUser": "node"
 }

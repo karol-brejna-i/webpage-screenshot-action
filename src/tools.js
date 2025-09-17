@@ -90,7 +90,14 @@ module.exports = {
     },
 
     getBrowserPath: async function () {
+        // Check if PUPPETEER_EXECUTABLE_PATH is set (for local testing)
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            core.debug('Using PUPPETEER_EXECUTABLE_PATH: ' + process.env.PUPPETEER_EXECUTABLE_PATH);
+            return process.env.PUPPETEER_EXECUTABLE_PATH;
+        }
+
         const type = os.type();
+        const fs = require('fs');
 
         let browserPath;
         if (type === 'Windows_NT') {
@@ -98,7 +105,25 @@ module.exports = {
         } else if (type === 'Darwin') {
             browserPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
         } else {
-            browserPath = '/usr/bin/google-chrome';
+            // On Linux, try multiple possible browser locations
+            const possiblePaths = [
+                '/usr/bin/google-chrome',
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+                '/snap/bin/chromium'
+            ];
+            
+            for (const testPath of possiblePaths) {
+                if (fs.existsSync(testPath)) {
+                    browserPath = testPath;
+                    break;
+                }
+            }
+            
+            // If no browser found, default to google-chrome
+            if (!browserPath) {
+                browserPath = '/usr/bin/google-chrome';
+            }
         }
         core.debug('Browser path: ' + browserPath);
         return browserPath;
